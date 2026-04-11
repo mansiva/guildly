@@ -263,8 +263,8 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
           <span className="flex items-center gap-1 text-xs text-gray-400"><Users size={12} />{group.memberIds?.length || 0}</span>
           {(isAdmin || isOwner) && (
             <button onClick={() => { setExpanded(!expanded); if (!expanded) loadMembers(); }}
-              className="p-2 rounded-xl bg-gray-50 text-gray-500 active:scale-95">
-              <Users size={16} />
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-medium active:scale-95 transition-transform">
+              Manage {expanded ? '▲' : '▼'}
             </button>
           )}
         </div>
