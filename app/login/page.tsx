@@ -136,6 +136,13 @@ export default function LoginPage() {
             Email sign-up requires your admin to enable it in Firebase.
           </p>
         )}
+
+        <p className="text-xs text-gray-400 text-center mt-5">
+          By continuing, you agree to our{' '}
+          <a href="/terms" className="text-indigo-500 underline">Terms of Service</a>
+          {' '}and{' '}
+          <a href="/privacy" className="text-indigo-500 underline">Privacy Policy</a>
+        </p>
       </div>
     </div>
   );
