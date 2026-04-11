@@ -25,7 +25,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const activeQuests = quests.filter(q => q.status === 'active');
   const completedQuests = quests.filter(q => q.status === 'completed');
   const { level, progress, nextLevelXp } = xpToLevel(group.xp || 0);
-  const isAdmin = group.adminIds?.includes(user!.uid);
+  const isOwner = group.ownerId === user!.uid;
+  const isAdmin = isOwner || group.adminIds?.includes(user!.uid);
 
   return (
     <AppShell>
@@ -58,7 +59,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-gray-900">Active Quests ({activeQuests.length})</h2>
-            <Link href="/quests" className="text-sm text-indigo-600 font-medium">+ Quest</Link>
+            {isAdmin && <Link href="/quests" className="text-sm text-indigo-600 font-medium">+ Quest</Link>}
           </div>
           {activeQuests.length === 0 ? (
             <div className="bg-white rounded-3xl p-6 text-center border border-dashed border-gray-200">

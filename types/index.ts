@@ -17,13 +17,24 @@ export interface Group {
   name: string;
   description?: string;
   emoji: string;
+  ownerId: string;
   adminIds: string[];
   memberIds: string[];
-  inviteCode: string;
   maxMembers: number;
   xp: number;
   badges: Badge[];
   createdAt: Date;
+}
+
+export interface GroupInvite {
+  id: string;
+  groupId: string;
+  createdBy: string;
+  createdAt: Date;
+  expiresAt: Date;
+  used: boolean;
+  usedBy?: string;
+  usedAt?: Date;
 }
 
 export interface Quest {

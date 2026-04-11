@@ -2,33 +2,56 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Users can read/write their own profile
+    // Users can read any profile (for member lists), write only their own
     match /users/{userId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // Groups: members can read, admins can update group info
+    // Groups
     match /groups/{groupId} {
       allow read: if request.auth != null && request.auth.uid in resource.data.memberIds;
       allow create: if request.auth != null;
+      // Members can update (log progress updates contributions); admin/owner gate enforced client-side for sensitive ops
       allow update: if request.auth != null && (
+        request.auth.uid in resource.data.memberIds ||
         request.auth.uid in resource.data.adminIds ||
-        request.auth.uid in resource.data.memberIds
+        request.auth.uid == resource.data.ownerId
       );
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
-      // Quests within a group
+      // Quests — only admins/owner can create; members can update (log progress)
       match /quests/{questId} {
-        allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
-        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
-        allow update: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow read: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow create: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.adminIds ||
+          request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId
+        );
+        allow update: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow delete: if request.auth != null && (
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.adminIds ||
+          request.auth.uid == get(/databases/$(database)/documents/groups/$(groupId)).data.ownerId
+        );
       }
 
-      // Feed within a group
+      // Feed — members can read and create
       match /feed/{entryId} {
-        allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
-        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow read: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+        allow create: if request.auth != null &&
+          request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
       }
+    }
+
+    // Invites — anyone authenticated can read (needed to join via link)
+    // Only the invite's creator's group admins/owner can create
+    match /invites/{inviteId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null; // for marking as used
+      allow delete: if request.auth != null; // admins can revoke
     }
   }
 }

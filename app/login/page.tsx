@@ -1,18 +1,20 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   const { signIn, signUp, signInWithGoogle, user, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/dashboard';
   const [mode, setMode] = useState<'login' | 'signup'>('login');
 
   useEffect(() => {
-    if (!authLoading && user) router.replace('/dashboard');
-  }, [user, authLoading, router]);
+    if (!authLoading && user) router.replace(redirect);
+  }, [user, authLoading, router, redirect]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,7 +32,7 @@ export default function LoginPage() {
       } else {
         await signUp(email, password, displayName);
       }
-      router.push('/dashboard');
+      router.push(redirect);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
@@ -43,7 +45,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      router.push('/dashboard');
+      router.push(redirect);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
