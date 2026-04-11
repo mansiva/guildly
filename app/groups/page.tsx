@@ -211,10 +211,11 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
       });
 
       const link = `${window.location.origin}/join/${code}`;
-      const text = `Join my group "${group.name}" on Guildly! ${link}`;
+      const title = `Join ${group.name} on Guildly`;
+      const text = `You've been invited to join "${group.name}" on Guildly. Tap the link to join!`;
 
       if (navigator.share) {
-        await navigator.share({ title: `Join ${group.name} on Guildly`, text, url: link });
+        await navigator.share({ title, text, url: link });
       } else {
         await navigator.clipboard.writeText(link);
         alert('Invite link copied to clipboard!');
