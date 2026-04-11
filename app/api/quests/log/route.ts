@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
         questId,
         questTitle: quest.title,
         userId: 'system',
-        userName: 'Synergo',
+        userName: 'Guildly',
         value: 0,
         unit: '',
         nudge: `🏆 Quest complete! "${quest.title}" — the group earned ${xpReward} XP!`,

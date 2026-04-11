@@ -50,8 +50,8 @@ export default function LoginPage() {
       {/* Logo */}
       <div className="text-center mb-8">
         <div className="text-6xl mb-2">⚡</div>
-        <h1 className="text-4xl font-bold text-white">Synergo</h1>
-        <p className="text-indigo-100 mt-1">Quest together. Win together.</p>
+        <h1 className="text-4xl font-bold text-white">Guildly</h1>
+        <p className="text-indigo-100 mt-1">Quest together. Level up together.</p>
       </div>
 
       {/* Card */}

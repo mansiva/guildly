@@ -6,13 +6,13 @@ import { AuthProvider } from '@/context/AuthContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Synergo — Quest Together',
+  title: 'Guildly — Quest Together',
   description: 'Group quests, shared goals, collective wins.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Synergo',
+    title: 'Guildly',
   },
 };
 

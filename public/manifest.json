@@ -1,7 +1,7 @@
 {
-  "name": "Synergo",
-  "short_name": "Synergo",
-  "description": "Quest together. Win together.",
+  "name": "Guildly",
+  "short_name": "Guildly",
+  "description": "Quest together. Level up together.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

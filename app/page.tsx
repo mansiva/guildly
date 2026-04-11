@@ -18,7 +18,7 @@ export default function RootPage() {
     <div className="flex items-center justify-center min-h-screen bg-indigo-50">
       <div className="text-center">
         <div className="text-5xl mb-4">⚡</div>
-        <p className="text-indigo-600 font-semibold text-lg">Synergo</p>
+        <p className="text-indigo-600 font-semibold text-lg">Guildly</p>
         <p className="text-gray-400 text-sm mt-1">Loading...</p>
       </div>
     </div>
