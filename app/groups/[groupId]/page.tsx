@@ -65,7 +65,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         expiresAt: Timestamp.fromDate(expiresAt),
         used: false,
       });
-      const link = `${window.location.origin}/join/${code}`;
+      const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const link = `${base}/join/${code}`;
       const title = `Join ${group?.name} on Guildly`;
       const text = `You've been invited to join "${group?.name}" on Guildly. Tap the link to join!`;
       if (navigator.share) {

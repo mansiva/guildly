@@ -237,7 +237,8 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
         used: false,
       });
 
-      const link = `${window.location.origin}/join/${code}`;
+      const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const link = `${base}/join/${code}`;
       const title = `Join ${group.name} on Guildly`;
       const text = `You've been invited to join "${group.name}" on Guildly. Tap the link to join!`;
 
