@@ -71,7 +71,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
 
   async function handleDelete() {
     if (!isOwner) return;
-    if (!confirm(`Delete "${group.name}"? This cannot be undone. All quests and data will be lost.`)) return;
+    if (!confirm(`Delete "${group?.name}"? This cannot be undone. All quests and data will be lost.`)) return;
     setDeleting(true);
     try {
       // Delete subcollections first (quests, feed)
