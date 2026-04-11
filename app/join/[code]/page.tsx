@@ -14,7 +14,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [state, setState] = useState<State>('loading');
-  const [groupName, setGroupName] = useState('');
+  const [groupId, setGroupId] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
@@ -52,14 +52,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         return;
       }
 
-      // Check group exists
-      const groupSnap = await getDoc(doc(db, 'groups', invite.groupId));
-      if (!groupSnap.exists()) {
-        setState('invalid');
-        return;
-      }
-
-      setGroupName(groupSnap.data().name);
+      setGroupId(invite.groupId);
 
       // Already a member?
       const memberRef = doc(db, 'groupMembers', `${invite.groupId}_${user!.uid}`);
@@ -88,6 +81,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
       setState('joined');
       setTimeout(() => router.replace(`/groups/${invite.groupId}`), 1500);
+
     } catch (e) {
       console.error(e);
       setErrorMsg('Something went wrong. Please try again.');
@@ -114,7 +108,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
           {state === 'joining' && (
             <div className="py-4">
               <div className="text-4xl animate-pulse mb-3">⚡</div>
-              <p className="text-gray-600 font-medium">Joining {groupName}...</p>
+              <p className="text-gray-600 font-medium">Joining group...</p>
             </div>
           )}
 
@@ -122,7 +116,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
             <div className="py-4">
               <div className="text-5xl mb-3">🎉</div>
               <h2 className="text-xl font-bold text-gray-900 mb-1">You're in!</h2>
-              <p className="text-gray-500 text-sm">Taking you to {groupName}...</p>
+              <p className="text-gray-500 text-sm">Taking you to your group...</p>
             </div>
           )}
 
