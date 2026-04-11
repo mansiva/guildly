@@ -110,7 +110,7 @@ export default function GroupsPage() {
         {/* Create form */}
         {showCreate && (
           <div className="bg-white rounded-3xl p-5 mb-4 border border-indigo-100 shadow-sm">
-            <h3 className="font-bold mb-4">Create Group</h3>
+            <h3 className="font-bold text-gray-900 mb-4">Create Group</h3>
             <div className="flex gap-2 flex-wrap mb-3">
               {GROUP_EMOJIS.map(e => (
                 <button key={e} onClick={() => setGroupEmoji(e)}
@@ -120,9 +120,9 @@ export default function GroupsPage() {
               ))}
             </div>
             <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name" maxLength={40}
-              className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200" />
+              className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200" />
             <input value={groupDesc} onChange={e => setGroupDesc(e.target.value)} placeholder="Description (optional)" maxLength={100}
-              className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200" />
+              className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200" />
             {error && <p className="text-red-500 text-xs mb-2">{error}</p>}
             <div className="flex gap-2">
               <button onClick={() => setShowCreate(false)} className="flex-1 py-3 border border-gray-200 rounded-2xl text-sm font-medium">Cancel</button>
@@ -137,9 +137,9 @@ export default function GroupsPage() {
         {/* Join form */}
         {showJoin && (
           <div className="bg-white rounded-3xl p-5 mb-4 border border-indigo-100 shadow-sm">
-            <h3 className="font-bold mb-4">Join a Group</h3>
+            <h3 className="font-bold text-gray-900 mb-4">Join a Group</h3>
             <input value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="Invite code (e.g. XK9F2T)"
-              maxLength={6} className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200 tracking-widest text-center font-mono text-lg uppercase" />
+              maxLength={6} className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200 tracking-widest text-center font-mono text-lg uppercase" />
             {error && <p className="text-red-500 text-xs mb-2 text-center">{error}</p>}
             <div className="flex gap-2">
               <button onClick={() => setShowJoin(false)} className="flex-1 py-3 border border-gray-200 rounded-2xl text-sm font-medium">Cancel</button>

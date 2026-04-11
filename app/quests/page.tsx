@@ -154,25 +154,25 @@ export default function QuestsPage() {
                 ))}
               </div>
               <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Quest title" maxLength={60}
-                className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               <input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description" maxLength={120}
-                className="w-full px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               <div className="flex gap-2">
                 <input value={target} onChange={e => setTarget(e.target.value)} placeholder="Target" type="number" min="1"
-                  className="flex-1 px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                  className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
                 <input value={unit} onChange={e => setUnit(e.target.value)} placeholder="Unit (steps, km...)"
-                  className="flex-1 px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                  className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
               <div className="flex gap-2">
                 <select value={days} onChange={e => setDays(e.target.value)}
-                  className="flex-1 px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200">
+                  className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200">
                   <option value="3">3 days</option>
                   <option value="7">1 week</option>
                   <option value="14">2 weeks</option>
                   <option value="30">1 month</option>
                 </select>
                 <input value={xpReward} onChange={e => setXpReward(e.target.value)} placeholder="XP reward" type="number"
-                  className="flex-1 px-4 py-3 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                  className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
             </div>
 
