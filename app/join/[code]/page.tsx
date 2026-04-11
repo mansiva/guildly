@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Image from 'next/image';
@@ -68,14 +68,11 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         }
       }
 
-      // Get member count from groupMembers
-      const memberCountSnap = await getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', groupSnap.id)));
-
       setGroup({
         id: groupSnap.id,
         name: groupData.name,
         emoji: groupData.emoji,
-        memberCount: memberCountSnap.size,
+        memberCount: 0,
         description: groupData.description,
       });
       setState('preview');
@@ -150,9 +147,7 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
               <div className="text-6xl mb-3">{group.emoji}</div>
               <h1 className="text-2xl font-bold text-gray-900 mb-1">{group.name}</h1>
               {group.description && <p className="text-gray-500 text-sm mb-3">{group.description}</p>}
-              <div className="flex items-center justify-center gap-1 text-gray-400 text-sm mb-6">
-                <Users size={14} /> {group.memberCount} member{group.memberCount !== 1 ? 's' : ''}
-              </div>
+
               <p className="text-gray-500 text-sm mb-6">You've been invited to join this group on Guildly.</p>
               <button onClick={handleJoin}
                 className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-base shadow-lg active:scale-95 transition-transform">
