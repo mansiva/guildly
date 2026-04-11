@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { getAdminDb } from '@/lib/firebase-admin';
+
+export const dynamic = 'force-dynamic';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getNudgeForMilestone } from '@/lib/nudges';
 
@@ -11,6 +13,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
     }
 
+    const adminDb = getAdminDb();
     const questRef = adminDb.doc(`groups/${groupId}/quests/${questId}`);
     const questSnap = await questRef.get();
 
