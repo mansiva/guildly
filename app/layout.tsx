@@ -9,6 +9,10 @@ export const metadata: Metadata = {
   title: 'Guildly — Quest Together',
   description: 'Group quests, shared goals, collective wins.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',

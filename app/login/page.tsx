@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
@@ -54,7 +55,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex flex-col items-center justify-center p-6">
       {/* Logo */}
       <div className="text-center mb-8">
-        <div className="text-6xl mb-2">⚡</div>
+        <Image src="/logo.png" alt="Guildly" width={96} height={96} className="mx-auto mb-3 drop-shadow-xl" />
         <h1 className="text-4xl font-bold text-white">Guildly</h1>
         <p className="text-indigo-100 mt-1">Quest together. Level up together.</p>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function LandingPage() {
   return (
@@ -8,7 +9,10 @@ export default function LandingPage() {
 
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-4">
-        <span className="text-white font-bold text-xl">⚡ Guildly</span>
+        <div className="flex items-center gap-2">
+          <Image src="/logo.png" alt="Guildly" width={36} height={36} className="rounded-lg" />
+          <span className="text-white font-bold text-xl">Guildly</span>
+        </div>
         <Link href="/login"
           className="px-4 py-2 bg-white/20 text-white text-sm font-semibold rounded-full backdrop-blur-sm hover:bg-white/30 transition-colors">
           Sign In
@@ -17,7 +21,7 @@ export default function LandingPage() {
 
       {/* Hero */}
       <div className="flex flex-col items-center text-center px-6 pt-12 pb-16">
-        <div className="text-7xl mb-6">⚡</div>
+        <Image src="/logo.png" alt="Guildly" width={120} height={120} className="mb-4 drop-shadow-xl" />
         <h1 className="text-4xl font-extrabold text-white leading-tight mb-4">
           Quest together.<br />Level up together.
         </h1>
