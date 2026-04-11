@@ -55,7 +55,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         used: false,
       });
       const link = `${window.location.origin}/join/${code}`;
-      const text = `Join my group "${group.name}" on Guildly!`;
+      const text = `Join my group "${group?.name}" on Guildly!`;
       if (navigator.share) {
         await navigator.share({ title: text, text, url: link });
       } else {
