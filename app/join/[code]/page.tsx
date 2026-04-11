@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Image from 'next/image';
@@ -27,7 +27,6 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
   async function loadInvite() {
     try {
-      // Invite code is the document ID — direct lookup, no index needed
       const inviteRef = doc(db, 'invites', code.toUpperCase());
       const inviteDoc = await getDoc(inviteRef);
 
@@ -60,17 +59,23 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
       const groupData = groupSnap.data();
 
-      // Already a member?
-      if (user && groupData.memberIds?.includes(user.uid)) {
-        router.replace(`/groups/${groupSnap.id}`);
-        return;
+      // Already a member? Check groupMembers collection
+      if (user) {
+        const memberSnap = await getDoc(doc(db, 'groupMembers', `${groupSnap.id}_${user.uid}`));
+        if (memberSnap.exists()) {
+          router.replace(`/groups/${groupSnap.id}`);
+          return;
+        }
       }
+
+      // Get member count from groupMembers
+      const memberCountSnap = await getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', groupSnap.id)));
 
       setGroup({
         id: groupSnap.id,
         name: groupData.name,
         emoji: groupData.emoji,
-        memberCount: groupData.memberIds?.length || 0,
+        memberCount: memberCountSnap.size,
         description: groupData.description,
       });
       setState('preview');
@@ -83,14 +88,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
   async function handleJoin() {
     if (!user || !group) {
-      // Not logged in — send to login then back here
       router.push(`/login?redirect=/join/${code}`);
       return;
     }
 
     setState('joining');
     try {
-      // Re-check invite is still valid
       const inviteRef = doc(db, 'invites', inviteId);
       const inviteSnap = await getDoc(inviteRef);
       const invite = inviteSnap.data()!;
@@ -104,14 +107,12 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         usedAt: serverTimestamp(),
       });
 
-      // Add user to group
-      await updateDoc(doc(db, 'groups', group.id), {
-        memberIds: arrayUnion(user.uid),
-      });
-
-      // Add group to user's list
-      await updateDoc(doc(db, 'users', user.uid), {
-        groupIds: arrayUnion(group.id),
+      // Add user to groupMembers
+      await setDoc(doc(db, 'groupMembers', `${group.id}_${user.uid}`), {
+        groupId: group.id,
+        userId: user.uid,
+        role: 'member',
+        joinedAt: serverTimestamp(),
       });
 
       setState('joined');
@@ -123,7 +124,6 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
     }
   }
 
-  // Redirect to login if not authed and they want to join
   useEffect(() => {
     if (state === 'preview' && !authLoading && !user) {
       // Stay on page — show "Sign in to join" button

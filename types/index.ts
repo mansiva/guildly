@@ -8,7 +8,6 @@ export interface User {
   xp: number;
   level: number;
   badges: Badge[];
-  groupIds: string[];
   createdAt: Date;
 }
 
@@ -17,13 +16,18 @@ export interface Group {
   name: string;
   description?: string;
   emoji: string;
-  ownerId: string;
-  adminIds: string[];
-  memberIds: string[];
   maxMembers: number;
   xp: number;
   badges: Badge[];
   createdAt: Date;
+}
+
+export interface GroupMember {
+  id: string;
+  groupId: string;
+  userId: string;
+  role: 'owner' | 'admin' | 'member';
+  joinedAt: any;
 }
 
 export interface GroupInvite {

@@ -1,10 +1,10 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import AppShell from '@/components/layout/AppShell';
-import { useGroup, useGroupQuests, useGroupFeed } from '@/hooks/useGroup';
+import { useGroup, useGroupQuests, useGroupFeed, useGroupMembers } from '@/hooks/useGroup';
 import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
@@ -12,7 +12,7 @@ import { xpToLevel } from '@/lib/utils';
 import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc, getDocs, query, where, updateDoc, arrayRemove
+  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc, getDocs, query, where, getDoc, setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -27,8 +27,19 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const { group } = useGroup(groupId);
   const { quests } = useGroupQuests(groupId);
   const { feed } = useGroupFeed(groupId);
+  const { members } = useGroupMembers(groupId);
   const [sharing, setSharing] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null);
+
+  useEffect(() => {
+    if (!user || !groupId) return;
+    getDoc(doc(db, 'groupMembers', `${groupId}_${user.uid}`)).then(snap => {
+      if (snap.exists()) {
+        setUserRole(snap.data().role as 'owner' | 'admin' | 'member');
+      }
+    });
+  }, [groupId, user]);
 
   if (!group) return (
     <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
@@ -37,8 +48,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const activeQuests = quests.filter(q => q.status === 'active');
   const completedQuests = quests.filter(q => q.status === 'completed');
   const { level, progress, nextLevelXp } = xpToLevel(group.xp || 0);
-  const isOwner = group.ownerId === user!.uid;
-  const isAdmin = isOwner || group.adminIds?.includes(user!.uid);
+  const isOwner = userRole === 'owner';
+  const isAdmin = userRole === 'owner' || userRole === 'admin';
 
   async function handleInvite() {
     setSharing(true);
@@ -46,8 +57,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const code = generateCode();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
-      // Use code as document ID — avoids needing a Firestore index for queries
-      const { setDoc } = await import('firebase/firestore');
       await setDoc(doc(db, 'invites', code), {
         code,
         groupId,
@@ -77,7 +86,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     if (!confirm(`Delete "${group?.name}"? This cannot be undone. All quests and data will be lost.`)) return;
     setDeleting(true);
     try {
-      // Delete subcollections first (quests, feed)
+      // Delete subcollections (quests, feed)
       for (const sub of ['quests', 'feed']) {
         const snap = await getDocs(collection(db, 'groups', groupId, sub));
         await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
@@ -85,13 +94,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       // Delete invites for this group
       const invSnap = await getDocs(query(collection(db, 'invites'), where('groupId', '==', groupId)));
       await Promise.all(invSnap.docs.map(d => deleteDoc(d.ref)));
+      // Delete all groupMembers docs
+      const gmSnap = await getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', groupId)));
+      await Promise.all(gmSnap.docs.map(d => deleteDoc(d.ref)));
       // Delete the group itself
       await deleteDoc(doc(db, 'groups', groupId));
-      // Remove groupId from all members' groupIds arrays
-      const memberIds: string[] = group?.memberIds || [];
-      await Promise.all(memberIds.map(uid =>
-        updateDoc(doc(db, 'users', uid), { groupIds: arrayRemove(groupId) })
-      ));
       router.replace('/groups');
     } catch (e) {
       console.error(e);
@@ -116,7 +123,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               {isOwner && <Crown size={16} className="text-yellow-500" />}
             </div>
             <div className="flex items-center gap-1 text-xs text-gray-400">
-              <Users size={12} /> {group.memberIds?.length || 0} members
+              <Users size={12} /> {members.length} members
             </div>
           </div>
           <div className="text-right">

@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
-  doc, getDoc, setDoc, collection, addDoc, updateDoc, arrayUnion, arrayRemove,
-  serverTimestamp, Timestamp
+  doc, getDoc, setDoc, collection, addDoc, updateDoc, deleteDoc,
+  serverTimestamp, Timestamp, query, where, getDocs
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
-import { Group } from '@/types';
+import { Group, GroupMember } from '@/types';
 import { Plus, Users, Crown, UserPlus, Share2, Shield, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,6 +21,7 @@ function generateCode(): string {
 export default function GroupsPage() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<Group[]>([]);
+  const [membershipMap, setMembershipMap] = useState<Record<string, GroupMember>>({});
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -32,10 +33,15 @@ export default function GroupsPage() {
 
   async function loadGroups() {
     if (!user) return;
-    const snap = await getDoc(doc(db, 'users', user.uid));
-    if (!snap.exists()) return;
-    const gIds: string[] = snap.data().groupIds || [];
-    const loaded = await Promise.all(gIds.map(async id => {
+    const q = query(collection(db, 'groupMembers'), where('userId', '==', user.uid));
+    const snap = await getDocs(q);
+    const memberships: Record<string, GroupMember> = {};
+    snap.docs.forEach(d => {
+      const m = { id: d.id, ...d.data() } as GroupMember;
+      memberships[m.groupId] = m;
+    });
+    setMembershipMap(memberships);
+    const loaded = await Promise.all(Object.keys(memberships).map(async id => {
       const gs = await getDoc(doc(db, 'groups', id));
       return gs.exists() ? { id: gs.id, ...gs.data() } as Group : null;
     }));
@@ -52,15 +58,17 @@ export default function GroupsPage() {
         name: groupName.trim(),
         description: groupDesc.trim(),
         emoji: groupEmoji,
-        ownerId: user.uid,
-        adminIds: [user.uid],
-        memberIds: [user.uid],
         maxMembers: 50,
         xp: 0,
         badges: [],
         createdAt: serverTimestamp(),
       });
-      await updateDoc(doc(db, 'users', user.uid), { groupIds: arrayUnion(ref.id) });
+      await setDoc(doc(db, 'groupMembers', `${ref.id}_${user.uid}`), {
+        groupId: ref.id,
+        userId: user.uid,
+        role: 'owner',
+        joinedAt: serverTimestamp(),
+      });
       setShowCreate(false); setGroupName(''); setGroupDesc('');
       await loadGroups();
     } catch (e: unknown) {
@@ -78,8 +86,12 @@ export default function GroupsPage() {
         const invite = inviteSnap.data();
         if (invite.used) { setError('This invite has already been used'); setLoading(false); return; }
         await updateDoc(inviteRef, { used: true, usedBy: user.uid, usedAt: serverTimestamp() });
-        await updateDoc(doc(db, 'groups', invite.groupId), { memberIds: arrayUnion(user.uid) });
-        await updateDoc(doc(db, 'users', user.uid), { groupIds: arrayUnion(invite.groupId) });
+        await setDoc(doc(db, 'groupMembers', `${invite.groupId}_${user.uid}`), {
+          groupId: invite.groupId,
+          userId: user.uid,
+          role: 'member',
+          joinedAt: serverTimestamp(),
+        });
         setShowJoin(false); setJoinCode('');
         await loadGroups();
         return;
@@ -160,8 +172,9 @@ export default function GroupsPage() {
         ) : (
           <div className="space-y-3">
             {groups.map(g => {
-              const isOwner = g.ownerId === user!.uid;
-              const isAdmin = g.adminIds?.includes(user!.uid);
+              const membership = membershipMap[g.id];
+              const isOwner = membership?.role === 'owner';
+              const isAdmin = membership?.role === 'owner' || membership?.role === 'admin';
               return (
                 <GroupCard key={g.id} group={g} userId={user!.uid} isOwner={isOwner} isAdmin={isAdmin} onUpdate={loadGroups} />
               );
@@ -177,27 +190,43 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
   group: Group; userId: string; isOwner: boolean; isAdmin: boolean; onUpdate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [members, setMembers] = useState<{ uid: string; displayName: string; photoURL?: string }[]>([]);
+  const [members, setMembers] = useState<{ uid: string; displayName: string; photoURL?: string; role: string }[]>([]);
+  const [memberCount, setMemberCount] = useState(0);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [sharing, setSharing] = useState(false);
 
   async function loadMembers() {
     setLoadingMembers(true);
-    const loaded = await Promise.all(group.memberIds.map(async uid => {
-      const snap = await getDoc(doc(db, 'users', uid));
-      return snap.exists() ? { uid, ...snap.data() } as { uid: string; displayName: string; photoURL?: string } : null;
+    const q = query(collection(db, 'groupMembers'), where('groupId', '==', group.id));
+    const snap = await getDocs(q);
+    const memberDocs = snap.docs.map(d => d.data() as GroupMember & { id: string });
+    setMemberCount(memberDocs.length);
+    const loaded = await Promise.all(memberDocs.map(async m => {
+      const userSnap = await getDoc(doc(db, 'users', m.userId));
+      return userSnap.exists()
+        ? { uid: m.userId, role: m.role, ...userSnap.data() } as { uid: string; displayName: string; photoURL?: string; role: string }
+        : null;
     }));
-    setMembers(loaded.filter(Boolean) as { uid: string; displayName: string; photoURL?: string }[]);
+    setMembers(loaded.filter(Boolean) as { uid: string; displayName: string; photoURL?: string; role: string }[]);
     setLoadingMembers(false);
   }
+
+  // Load member count on mount
+  useEffect(() => {
+    async function fetchCount() {
+      const q = query(collection(db, 'groupMembers'), where('groupId', '==', group.id));
+      const snap = await getDocs(q);
+      setMemberCount(snap.size);
+    }
+    fetchCount();
+  }, [group.id]);
 
   async function handleInvite() {
     setSharing(true);
     try {
-      // Generate single-use invite
       const code = generateCode();
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
+      expiresAt.setDate(expiresAt.getDate() + 7);
 
       await setDoc(doc(db, 'invites', code), {
         code,
@@ -227,25 +256,27 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
 
   async function removeMember(uid: string) {
     if (!confirm('Remove this member?')) return;
-    await updateDoc(doc(db, 'groups', group.id), { memberIds: arrayRemove(uid) });
-    await updateDoc(doc(db, 'users', uid), { groupIds: arrayRemove(group.id) });
+    await deleteDoc(doc(db, 'groupMembers', `${group.id}_${uid}`));
     setMembers(prev => prev.filter(m => m.uid !== uid));
+    setMemberCount(prev => prev - 1);
     onUpdate();
   }
 
   async function promoteToAdmin(uid: string) {
-    await updateDoc(doc(db, 'groups', group.id), { adminIds: arrayUnion(uid) });
+    await updateDoc(doc(db, 'groupMembers', `${group.id}_${uid}`), { role: 'admin' });
+    setMembers(prev => prev.map(m => m.uid === uid ? { ...m, role: 'admin' } : m));
     onUpdate();
   }
 
   async function demoteAdmin(uid: string) {
-    await updateDoc(doc(db, 'groups', group.id), { adminIds: arrayRemove(uid) });
+    await updateDoc(doc(db, 'groupMembers', `${group.id}_${uid}`), { role: 'member' });
+    setMembers(prev => prev.map(m => m.uid === uid ? { ...m, role: 'member' } : m));
     onUpdate();
   }
 
-  function getRoleBadge(uid: string) {
-    if (uid === group.ownerId) return <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium flex items-center gap-1"><Crown size={10} /> Owner</span>;
-    if (group.adminIds?.includes(uid)) return <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium flex items-center gap-1"><Shield size={10} /> Admin</span>;
+  function getRoleBadge(role: string) {
+    if (role === 'owner') return <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium flex items-center gap-1"><Crown size={10} /> Owner</span>;
+    if (role === 'admin') return <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium flex items-center gap-1"><Shield size={10} /> Admin</span>;
     return null;
   }
 
@@ -259,7 +290,7 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
           {group.description && <p className="text-xs text-gray-500 truncate">{group.description}</p>}
         </Link>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="flex items-center gap-1 text-xs text-gray-400"><Users size={12} />{group.memberIds?.length || 0}</span>
+          <span className="flex items-center gap-1 text-xs text-gray-400"><Users size={12} />{memberCount}</span>
           {(isAdmin || isOwner) && (
             <button onClick={() => { setExpanded(!expanded); if (!expanded) loadMembers(); }}
               className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-gray-100 text-gray-500 text-xs font-medium active:scale-95 transition-transform">
@@ -286,8 +317,8 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
           ) : (
             <div className="space-y-2">
               {members.map(m => {
-                const memberIsOwner = m.uid === group.ownerId;
-                const memberIsAdmin = group.adminIds?.includes(m.uid);
+                const memberIsOwner = m.role === 'owner';
+                const memberIsAdmin = m.role === 'admin';
                 const canRemove = !memberIsOwner && (isOwner || (isAdmin && !memberIsAdmin));
                 const canToggleAdmin = isOwner && !memberIsOwner && m.uid !== userId;
 
@@ -299,7 +330,7 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-medium text-gray-800 truncate">{m.displayName}</span>
-                        {getRoleBadge(m.uid)}
+                        {getRoleBadge(m.role)}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
