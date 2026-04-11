@@ -9,16 +9,42 @@ import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2 } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, X } from 'lucide-react';
 import Link from 'next/link';
 import {
-  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc, getDocs, query, where, getDoc, setDoc
+  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc,
+  getDocs, query, where, getDoc, setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
+
+const XP_OPTIONS = [50, 100, 250, 500];
+const UNIT_OPTIONS = ['sessions', 'km', 'miles', 'pages', 'minutes', 'hours', 'reps', 'items', 'days'];
+
+interface QuestForm {
+  title: string;
+  description: string;
+  targetValue: string;
+  unit: string;
+  customUnit: string;
+  xpReward: number | 'custom';
+  customXp: string;
+  deadline: string;
+}
+
+const EMPTY_FORM: QuestForm = {
+  title: '',
+  description: '',
+  targetValue: '',
+  unit: 'sessions',
+  customUnit: '',
+  xpReward: 100,
+  customXp: '',
+  deadline: '',
+};
 
 export default function GroupDetailPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
@@ -31,13 +57,15 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [sharing, setSharing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null);
+  const [showQuestForm, setShowQuestForm] = useState(false);
+  const [questForm, setQuestForm] = useState<QuestForm>(EMPTY_FORM);
+  const [savingQuest, setSavingQuest] = useState(false);
+  const [questError, setQuestError] = useState('');
 
   useEffect(() => {
     if (!user || !groupId) return;
     getDoc(doc(db, 'groupMembers', `${groupId}_${user.uid}`)).then(snap => {
-      if (snap.exists()) {
-        setUserRole(snap.data().role as 'owner' | 'admin' | 'member');
-      }
+      if (snap.exists()) setUserRole(snap.data().role as 'owner' | 'admin' | 'member');
     });
   }, [groupId, user]);
 
@@ -58,9 +86,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
       await setDoc(doc(db, 'invites', code), {
-        code,
-        groupId,
-        createdBy: user!.uid,
+        code, groupId, createdBy: user!.uid,
         createdAt: serverTimestamp(),
         expiresAt: Timestamp.fromDate(expiresAt),
         used: false,
@@ -77,35 +103,59 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') console.error(e);
-    } finally {
-      setSharing(false);
-    }
+    } finally { setSharing(false); }
   }
 
   async function handleDelete() {
     if (!isOwner) return;
-    if (!confirm(`Delete "${group?.name}"? This cannot be undone. All quests and data will be lost.`)) return;
+    if (!confirm(`Delete "${group?.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      // Delete subcollections (quests, feed)
       for (const sub of ['quests', 'feed']) {
         const snap = await getDocs(collection(db, 'groups', groupId, sub));
         await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
       }
-      // Delete invites for this group
       const invSnap = await getDocs(query(collection(db, 'invites'), where('groupId', '==', groupId)));
       await Promise.all(invSnap.docs.map(d => deleteDoc(d.ref)));
-      // Delete all groupMembers docs
       const gmSnap = await getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', groupId)));
       await Promise.all(gmSnap.docs.map(d => deleteDoc(d.ref)));
-      // Delete the group itself
       await deleteDoc(doc(db, 'groups', groupId));
       router.replace('/groups');
     } catch (e) {
       console.error(e);
-      alert('Failed to delete group. Please try again.');
+      alert('Failed to delete group.');
       setDeleting(false);
     }
+  }
+
+  async function handleSaveQuest() {
+    if (!questForm.title.trim()) { setQuestError('Quest name is required'); return; }
+    if (!questForm.targetValue || Number(questForm.targetValue) <= 0) { setQuestError('Set a goal amount'); return; }
+    setSavingQuest(true); setQuestError('');
+    try {
+      const unit = questForm.unit === 'custom' ? questForm.customUnit.trim() || 'items' : questForm.unit;
+      const xpReward = questForm.xpReward === 'custom' ? Number(questForm.customXp) || 100 : questForm.xpReward;
+      await addDoc(collection(db, 'groups', groupId, 'quests'), {
+        groupId,
+        title: questForm.title.trim(),
+        description: questForm.description.trim(),
+        category: 'custom',
+        targetValue: Number(questForm.targetValue),
+        unit,
+        currentValue: 0,
+        contributions: {},
+        status: 'active',
+        xpReward,
+        deadline: questForm.deadline ? Timestamp.fromDate(new Date(questForm.deadline)) : null,
+        createdAt: serverTimestamp(),
+        createdBy: user!.uid,
+      });
+      setShowQuestForm(false);
+      setQuestForm(EMPTY_FORM);
+    } catch (e) {
+      console.error(e);
+      setQuestError('Failed to create quest. Try again.');
+    } finally { setSavingQuest(false); }
   }
 
   return (
@@ -140,12 +190,10 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50">
               {sharing ? '...' : <><UserPlus size={15} /><Share2 size={13} /> Invite</>}
             </button>
-            {isAdmin && (
-              <Link href="/quests"
-                className="flex-1 py-3 border border-indigo-200 text-indigo-600 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1 active:scale-95 transition-transform">
-                + Quest
-              </Link>
-            )}
+            <button onClick={() => { setShowQuestForm(true); setQuestError(''); }}
+              className="flex-1 py-3 border border-indigo-200 text-indigo-600 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+              + Quest
+            </button>
             {isOwner && (
               <button onClick={handleDelete} disabled={deleting}
                 className="py-3 px-4 border border-red-200 text-red-400 rounded-2xl text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50">
@@ -198,6 +246,132 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         </div>
 
       </div>
+
+      {/* Quest creation bottom sheet */}
+      {showQuestForm && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowQuestForm(false)} />
+
+          {/* Sheet */}
+          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-gray-900">New Quest</h2>
+              <button onClick={() => setShowQuestForm(false)} className="p-2 rounded-full bg-gray-100">
+                <X size={18} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Name */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Quest Name *</label>
+                <input
+                  value={questForm.title}
+                  onChange={e => setQuestForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Run 5km every day"
+                  maxLength={60}
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Description <span className="normal-case font-normal">(optional)</span></label>
+                <textarea
+                  value={questForm.description}
+                  onChange={e => setQuestForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="What needs to be done?"
+                  maxLength={200}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-none"
+                />
+              </div>
+
+              {/* Goal */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Goal *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={questForm.targetValue}
+                    onChange={e => setQuestForm(f => ({ ...f, targetValue: e.target.value }))}
+                    placeholder="30"
+                    min="1"
+                    className="w-28 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                  <select
+                    value={questForm.unit}
+                    onChange={e => setQuestForm(f => ({ ...f, unit: e.target.value }))}
+                    className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  >
+                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                    <option value="custom">custom...</option>
+                  </select>
+                </div>
+                {questForm.unit === 'custom' && (
+                  <input
+                    value={questForm.customUnit}
+                    onChange={e => setQuestForm(f => ({ ...f, customUnit: e.target.value }))}
+                    placeholder="e.g. chapters, workouts, glasses of water"
+                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                )}
+              </div>
+
+              {/* XP Reward */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">XP Reward</label>
+                <div className="flex gap-2 flex-wrap">
+                  {XP_OPTIONS.map(xp => (
+                    <button key={xp}
+                      onClick={() => setQuestForm(f => ({ ...f, xpReward: xp }))}
+                      className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${questForm.xpReward === xp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                      {xp} XP
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setQuestForm(f => ({ ...f, xpReward: 'custom' }))}
+                    className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${questForm.xpReward === 'custom' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                    Custom
+                  </button>
+                </div>
+                {questForm.xpReward === 'custom' && (
+                  <input
+                    type="number"
+                    value={questForm.customXp}
+                    onChange={e => setQuestForm(f => ({ ...f, customXp: e.target.value }))}
+                    placeholder="e.g. 750"
+                    min="1"
+                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                  />
+                )}
+              </div>
+
+              {/* Deadline */}
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Deadline <span className="normal-case font-normal">(optional)</span></label>
+                <input
+                  type="date"
+                  value={questForm.deadline}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={e => setQuestForm(f => ({ ...f, deadline: e.target.value }))}
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+              </div>
+
+              {questError && <p className="text-red-500 text-sm text-center">{questError}</p>}
+
+              <button
+                onClick={handleSaveQuest}
+                disabled={savingQuest || !questForm.title.trim() || !questForm.targetValue}
+                className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm active:scale-95 transition-transform disabled:opacity-50 mt-2">
+                {savingQuest ? 'Creating...' : 'Create Quest'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
