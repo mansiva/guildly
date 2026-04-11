@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import {
-  doc, getDoc, collection, addDoc, updateDoc, arrayUnion, arrayRemove,
-  serverTimestamp, query, where, getDocs, Timestamp
+  doc, getDoc, setDoc, collection, addDoc, updateDoc, arrayUnion, arrayRemove,
+  serverTimestamp, Timestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
@@ -72,14 +72,12 @@ export default function GroupsPage() {
     if (!user || !joinCode.trim()) return;
     setLoading(true); setError('');
     try {
-      // Try invite code first
-      const q = query(collection(db, 'invites'), where('code', '==', joinCode.trim().toUpperCase()));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const inviteDoc = snap.docs[0];
-        const invite = inviteDoc.data();
+      const inviteRef = doc(db, 'invites', joinCode.trim().toUpperCase());
+      const inviteSnap = await getDoc(inviteRef);
+      if (inviteSnap.exists()) {
+        const invite = inviteSnap.data();
         if (invite.used) { setError('This invite has already been used'); setLoading(false); return; }
-        await updateDoc(doc(db, 'invites', inviteDoc.id), { used: true, usedBy: user.uid, usedAt: serverTimestamp() });
+        await updateDoc(inviteRef, { used: true, usedBy: user.uid, usedAt: serverTimestamp() });
         await updateDoc(doc(db, 'groups', invite.groupId), { memberIds: arrayUnion(user.uid) });
         await updateDoc(doc(db, 'users', user.uid), { groupIds: arrayUnion(invite.groupId) });
         setShowJoin(false); setJoinCode('');
@@ -201,7 +199,7 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
-      await addDoc(collection(db, 'invites'), {
+      await setDoc(doc(db, 'invites', code), {
         code,
         groupId: group.id,
         createdBy: userId,

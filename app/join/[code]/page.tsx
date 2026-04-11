@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, arrayUnion, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import Image from 'next/image';
@@ -27,17 +27,16 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
 
   async function loadInvite() {
     try {
-      // Look up invite by code
-      const q = query(collection(db, 'invites'), where('code', '==', code.toUpperCase()));
-      const snap = await getDocs(q);
+      // Invite code is the document ID — direct lookup, no index needed
+      const inviteRef = doc(db, 'invites', code.toUpperCase());
+      const inviteDoc = await getDoc(inviteRef);
 
-      if (snap.empty) {
+      if (!inviteDoc.exists()) {
         setErrorMsg('This invite link is invalid or has expired.');
         setState('error');
         return;
       }
 
-      const inviteDoc = snap.docs[0];
       const invite = inviteDoc.data();
       setInviteId(inviteDoc.id);
 

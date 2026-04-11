@@ -12,7 +12,7 @@ import { xpToLevel } from '@/lib/utils';
 import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import {
-  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc, getDocs, query, where
+  collection, addDoc, serverTimestamp, Timestamp, deleteDoc, doc, getDocs, query, where, updateDoc, arrayRemove
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -46,7 +46,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const code = generateCode();
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + 7);
-      await addDoc(collection(db, 'invites'), {
+      // Use code as document ID — avoids needing a Firestore index for queries
+      const { setDoc } = await import('firebase/firestore');
+      await setDoc(doc(db, 'invites', code), {
         code,
         groupId,
         createdBy: user!.uid,
@@ -85,6 +87,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       await Promise.all(invSnap.docs.map(d => deleteDoc(d.ref)));
       // Delete the group itself
       await deleteDoc(doc(db, 'groups', groupId));
+      // Remove groupId from all members' groupIds arrays
+      const memberIds: string[] = group?.memberIds || [];
+      await Promise.all(memberIds.map(uid =>
+        updateDoc(doc(db, 'users', uid), { groupIds: arrayRemove(groupId) })
+      ));
       router.replace('/groups');
     } catch (e) {
       console.error(e);
