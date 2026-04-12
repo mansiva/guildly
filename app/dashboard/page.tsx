@@ -2,45 +2,43 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
-import { useGroupQuests, useGroupFeed } from '@/hooks/useGroup';
+import { useUserGroups, useGroupQuests, useGroupFeed } from '@/hooks/useGroup';
 import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
 import { xpToLevel } from '@/lib/utils';
-import { Group, Quest } from '@/types';
+import { Group } from '@/types';
 import Link from 'next/link';
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [groups, setGroups] = useState<Group[]>([]);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
+  const { groups } = useUserGroups(user?.uid || null);
   const { quests } = useGroupQuests(activeGroupId);
   const { feed } = useGroupFeed(activeGroupId);
 
   const activeQuests = quests.filter(q => q.status === 'active');
 
+  // Set default active group once groups load
+  useEffect(() => {
+    if (groups.length > 0 && !activeGroupId) {
+      setActiveGroupId(groups[0].id);
+    }
+  }, [groups]);
+
   useEffect(() => {
     if (!user) return;
-    async function load() {
-      const snap = await getDoc(doc(db, 'users', user!.uid));
+    getDoc(doc(db, 'users', user.uid)).then(snap => {
       if (snap.exists()) {
         const data = snap.data();
         setUserData({ xp: data.xp || 0, displayName: data.displayName });
-        const gIds: string[] = data.groupIds || [];
-        if (gIds.length > 0) {
-          const groupSnaps = await Promise.all(gIds.map(id => getDoc(doc(db, 'groups', id))));
-          const loaded = groupSnaps.filter(s => s.exists()).map(s => ({ id: s.id, ...s.data() } as Group));
-          setGroups(loaded);
-          setActiveGroupId(loaded[0]?.id || null);
-        }
       }
-    }
-    load();
+    });
   }, [user]);
 
   const { level, progress, nextLevelXp } = xpToLevel(userData?.xp || 0);
@@ -80,7 +78,7 @@ export default function DashboardPage() {
             {/* Group selector */}
             {groups.length > 1 && (
               <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
-                {groups.map(g => (
+                {groups.map((g: Group) => (
                   <button
                     key={g.id}
                     onClick={() => setActiveGroupId(g.id)}

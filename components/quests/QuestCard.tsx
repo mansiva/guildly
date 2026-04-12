@@ -11,13 +11,28 @@ interface QuestCardProps {
   quest: Quest;
   userId: string;
   groupId: string;
+  onEdit?: (quest: Quest) => void;
 }
 
-export default function QuestCard({ quest, userId, groupId }: QuestCardProps) {
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  // Firestore Timestamp
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  const d = new Date(value as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+export default function QuestCard({ quest, userId, groupId, onEdit }: QuestCardProps) {
   const [showLog, setShowLog] = useState(false);
   const pct = Math.min(100, Math.round((quest.currentValue / quest.targetValue) * 100));
   const myContrib = quest.contributions?.[userId] || 0;
-  const daysLeft = Math.max(0, Math.ceil((new Date(quest.deadline).getTime() - Date.now()) / 86400000));
+  const deadlineDate = toDate(quest.deadline);
+  const daysLeft = deadlineDate
+    ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000))
+    : null;
   const completed = quest.status === 'completed';
 
   return (
@@ -37,9 +52,19 @@ export default function QuestCard({ quest, userId, groupId }: QuestCardProps) {
             <h3 className="font-bold text-gray-900">{quest.title}</h3>
             <p className="text-xs text-gray-500 mt-0.5">{quest.description}</p>
           </div>
-          <div className="text-right ml-3">
+          <div className="text-right ml-3 flex flex-col items-end gap-1">
             <div className="text-lg font-bold text-indigo-600">+{quest.xpReward} XP</div>
-            {!completed && <div className="text-xs text-gray-400">{daysLeft}d left</div>}
+            {!completed && daysLeft !== null && (
+              <div className="text-xs text-gray-400">{daysLeft}d left</div>
+            )}
+            {onEdit && (
+              <button
+                onClick={() => onEdit(quest)}
+                className="text-xs text-indigo-400 font-medium underline-offset-2 hover:text-indigo-600"
+              >
+                Edit
+              </button>
+            )}
           </div>
         </div>
 
