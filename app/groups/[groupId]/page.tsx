@@ -18,8 +18,6 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Quest } from '@/types';
-import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/lib/quest-templates';
-import { cn } from '@/lib/utils';
 
 function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -75,7 +73,7 @@ function CompactQuestRow({ quest, userId, groupId, onEdit }: {
 
   return (
     <>
-      <div className={cn('bg-white rounded-2xl border overflow-hidden', completed ? 'border-green-200' : 'border-gray-100')}>
+      <div className={`bg-white rounded-2xl border overflow-hidden ${completed ? 'border-green-200' : 'border-gray-100'}`}>
         {/* Compact row */}
         <button
           className="w-full flex items-center gap-3 px-4 py-3 text-left"
@@ -116,22 +114,15 @@ function CompactQuestRow({ quest, userId, groupId, onEdit }: {
         {/* Expanded detail */}
         {expanded && (
           <div className="px-4 pb-4 border-t border-gray-50">
-            <div className="flex items-center gap-2 mt-3 mb-2">
-              <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', CATEGORY_COLORS[quest.category])}>
-                {CATEGORY_LABELS[quest.category]}
-              </span>
-              <span className="text-xs text-indigo-600 font-bold ml-auto">+{quest.xpReward} XP</span>
+            <div className="flex items-center justify-between mt-3 mb-2">
+              <span className="text-xs text-indigo-600 font-bold">+{quest.xpReward} XP</span>
+              <span className="text-xs text-gray-500">My contribution: {quest.contributions?.[userId] || 0} {quest.unit}</span>
             </div>
-            {quest.description && <p className="text-xs text-gray-500 mb-2">{quest.description}</p>}
-            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-              <span>{quest.currentValue} / {quest.targetValue} {quest.unit}</span>
-              <span>My contribution: {quest.contributions?.[userId] || 0} {quest.unit}</span>
-            </div>
-            <ProgressBar value={quest.currentValue} max={quest.targetValue} showLabel />
+            {quest.description && <p className="text-xs text-gray-500">{quest.description}</p>}
             {onEdit && (
               <button
                 onClick={() => onEdit(quest)}
-                className="mt-3 text-xs text-indigo-500 font-medium"
+                className="mt-2 text-xs text-indigo-500 font-medium"
               >
                 Edit quest
               </button>
