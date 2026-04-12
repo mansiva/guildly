@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -50,6 +50,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null);
   const [showQuestForm, setShowQuestForm] = useState(false);
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
+  const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
 
   const [memberProfiles, setMemberProfiles] = useState<{
     uid: string; displayName: string; photoURL?: string; xp: number; role: string;
@@ -139,6 +140,22 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     } catch (e) {
       console.error(e); alert('Failed to delete group.'); setDeleting(false);
     }
+  }
+
+  async function handlePromote(uid: string) {
+    await updateDoc(doc(db, 'groupMembers', `${groupId}_${uid}`), { role: 'admin' });
+    setManagingMember(null);
+  }
+
+  async function handleDemote(uid: string) {
+    await updateDoc(doc(db, 'groupMembers', `${groupId}_${uid}`), { role: 'member' });
+    setManagingMember(null);
+  }
+
+  async function handleRemoveMember(uid: string) {
+    if (!confirm('Remove this member from the group?')) return;
+    await deleteDoc(doc(db, 'groupMembers', `${groupId}_${uid}`));
+    setManagingMember(null);
   }
 
   async function handleSaveQuest(data: ReturnType<typeof questFormToFirestore>) {
@@ -242,8 +259,13 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               <div className="divide-y divide-gray-50">
                 {memberProfiles.map(m => {
                   const questContrib = getMemberQuestXp(m.uid);
+                  const tappable = isOwner && m.role !== 'owner';
                   return (
-                    <div key={m.uid} className="flex items-center gap-3 py-2.5">
+                    <div
+                      key={m.uid}
+                      className={`flex items-center gap-3 py-2.5 ${tappable ? 'cursor-pointer active:bg-gray-50 rounded-xl -mx-1 px-1' : ''}`}
+                      onClick={() => tappable && setManagingMember(m)}
+                    >
                       <UserAvatar photoURL={m.photoURL} displayName={m.displayName} xp={m.xp} size="sm" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -254,8 +276,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                           <p className="text-xs text-indigo-500 font-medium">{questContrib} contributions</p>
                         )}
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="flex items-center gap-2 shrink-0">
                         <div className="text-xs font-bold text-indigo-600">{m.xp} XP</div>
+                        {tappable && <ChevronRight size={14} className="text-gray-300" />}
                       </div>
                     </div>
                   );
@@ -263,6 +286,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               </div>
             )}
           </div>
+          {isOwner && <p className="text-xs text-gray-400 text-center mt-1.5">Tap a member to manage their role</p>}
         </div>
 
         {/* Active quests */}
@@ -321,6 +345,62 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           onClose={() => setShowQuestForm(false)}
           onSave={handleSaveQuest}
         />
+      )}
+
+      {/* Member management action sheet (owner only) */}
+      {managingMember && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-end" onClick={() => setManagingMember(null)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div
+            className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-4 pb-safe"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Handle */}
+            <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-3 mb-4" />
+
+            {/* Member info */}
+            <div className="flex items-center gap-3 mb-5">
+              <UserAvatar photoURL={managingMember.photoURL} displayName={managingMember.displayName} xp={managingMember.xp} size="md" />
+              <div>
+                <p className="font-semibold text-gray-900">{managingMember.displayName}</p>
+                <p className="text-xs text-gray-400 capitalize">{managingMember.role}</p>
+              </div>
+              <button onClick={() => setManagingMember(null)} className="ml-auto p-2 text-gray-400">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {managingMember.role === 'member' ? (
+                <button
+                  onClick={() => handlePromote(managingMember.uid)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-indigo-50 text-indigo-700 rounded-2xl font-medium text-sm active:scale-[0.98] transition-transform"
+                >
+                  <Shield size={18} />
+                  Make Admin
+                  <span className="ml-auto text-xs text-indigo-400">Can edit quests</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleDemote(managingMember.uid)}
+                  className="w-full flex items-center gap-3 px-4 py-3.5 bg-gray-50 text-gray-700 rounded-2xl font-medium text-sm active:scale-[0.98] transition-transform"
+                >
+                  <Shield size={18} className="text-gray-400" />
+                  Remove Admin
+                  <span className="ml-auto text-xs text-gray-400">Revert to member</span>
+                </button>
+              )}
+              <button
+                onClick={() => handleRemoveMember(managingMember.uid)}
+                className="w-full flex items-center gap-3 px-4 py-3.5 bg-red-50 text-red-600 rounded-2xl font-medium text-sm active:scale-[0.98] transition-transform"
+              >
+                <Trash2 size={18} />
+                Remove from group
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );
