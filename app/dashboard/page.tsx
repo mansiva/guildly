@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
-import { useUserGroups, useGroupQuests, useGroupFeed } from '@/hooks/useGroup';
+import { useUserGroups, useGroupQuests, useGroupFeed, useGroupMembers } from '@/hooks/useGroup';
 import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
@@ -22,6 +22,8 @@ export default function DashboardPage() {
   const { groups } = useUserGroups(user?.uid || null);
   const { quests } = useGroupQuests(activeGroupId);
   const { feed } = useGroupFeed(activeGroupId);
+  const { members: memberDocs } = useGroupMembers(activeGroupId);
+  const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number }[]>([]);
 
   const activeQuests = quests.filter(q => q.status === 'active');
 
@@ -41,6 +43,15 @@ export default function DashboardPage() {
       }
     });
   }, [user]);
+
+  useEffect(() => {
+    if (memberDocs.length === 0) return;
+    Promise.all(memberDocs.map(async m => {
+      const snap = await getDoc(doc(db, 'users', m.userId));
+      const data = snap.exists() ? snap.data() : null;
+      return { uid: m.userId, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
+    })).then(setMemberProfiles);
+  }, [memberDocs]);
 
   const { level, progress, nextLevelXp } = xpToLevel(userData?.xp || 0);
 
@@ -127,7 +138,12 @@ export default function DashboardPage() {
               ) : (
                 <div className="bg-white rounded-3xl px-4 divide-y divide-gray-100 border border-gray-100">
                   {feed.slice(0, 10).map(entry => (
-                    <FeedItem key={entry.id} entry={entry} />
+                    <FeedItem
+                      key={entry.id}
+                      entry={entry}
+                      members={memberProfiles}
+                      quests={quests.map(q => ({ id: q.id, title: q.title }))}
+                    />
                   ))}
                 </div>
               )}

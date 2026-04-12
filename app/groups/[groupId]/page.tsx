@@ -461,7 +461,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             <p className="text-gray-400 text-sm text-center py-4">Nothing yet — log progress to get started!</p>
           ) : (
             <div className="bg-white rounded-3xl px-4 divide-y divide-gray-100 border border-gray-100">
-              {feed.slice(0, 20).map(e => <FeedItem key={e.id} entry={e} />)}
+              {feed.slice(0, 20).map(e => (
+                <FeedItem
+                  key={e.id}
+                  entry={e}
+                  members={memberProfiles}
+                  quests={quests.map(q => ({ id: q.id, title: q.title }))}
+                />
+              ))}
             </div>
           )}
         </div>
