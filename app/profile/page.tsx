@@ -54,7 +54,8 @@ export default function ProfilePage() {
     if (!user || !nameInput.trim()) return;
     setSavingName(true);
     try {
-      await updateDoc(doc(db, 'users', user.uid), { displayName: nameInput.trim() });
+      const name = nameInput.trim();
+      await updateDoc(doc(db, 'users', user.uid), { displayName: name, displayNameLower: name.toLowerCase() });
       setEditingName(false);
     } finally { setSavingName(false); }
   }

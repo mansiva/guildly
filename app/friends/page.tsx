@@ -155,7 +155,8 @@ export default function FriendsPage() {
     const myUid = user.uid;
     try {
       const input = searchInput.trim().toLowerCase();
-      let snap = await getDocs(query(collection(db, 'users'), where('username', '==', input)));
+      // Search by display name (case-insensitive via stored lowercase field) or email
+      let snap = await getDocs(query(collection(db, 'users'), where('displayNameLower', '==', input)));
       if (snap.empty) snap = await getDocs(query(collection(db, 'users'), where('email', '==', input)));
       if (snap.empty) { setSearchError('No user found'); return; }
       const foundUid = snap.docs[0].id;
@@ -247,11 +248,11 @@ export default function FriendsPage() {
         {/* Add friend panel */}
         {showAdd && (
           <div className="bg-white rounded-3xl border border-indigo-100 p-4 mb-4 shadow-sm">
-            <p className="text-sm font-semibold text-gray-700 mb-3">Find by username or email</p>
+            <p className="text-sm font-semibold text-gray-700 mb-3">Find by name or email</p>
             <div className="flex gap-2">
               <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                placeholder="username or email"
+                placeholder="name or email"
                 className="flex-1 px-3 py-2.5 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 text-gray-900 min-w-0" />
               <button onClick={handleSearch} disabled={searching || !searchInput.trim()}
                 className="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-50 active:scale-95 transition-transform shrink-0">

@@ -41,9 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const ref = doc(db, 'users', fbUser.uid);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
+      const name = fbUser.displayName || 'Anonymous';
       await setDoc(ref, {
         uid: fbUser.uid,
-        displayName: fbUser.displayName || 'Anonymous',
+        displayName: name,
+        displayNameLower: name.toLowerCase(),
         email: fbUser.email,
         photoURL: fbUser.photoURL || null,
         xp: 0,
