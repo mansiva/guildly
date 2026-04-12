@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import AppShell from '@/components/layout/AppShell';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
 import {
   collection, doc, getDoc, getDocs, query, where, setDoc,
-  updateDoc, serverTimestamp, orderBy, limit,
+  updateDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { UserPlus, Search, Share2, Check, X, Trophy, Users } from 'lucide-react';
@@ -43,14 +43,17 @@ function currentMonthKey() {
 
 export default function FriendsPage() {
   const { user } = useAuth();
+
   const [tab, setTab] = useState<'month' | 'alltime'>('month');
   const [friends, setFriends] = useState<FriendProfile[]>([]);
   const [pendingIn, setPendingIn] = useState<FriendRequest[]>([]);
   const [myProfile, setMyProfile] = useState<FriendProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   const [showAdd, setShowAdd] = useState(false);
   const [managingFriend, setManagingFriend] = useState<FriendProfile | null>(null);
+
   const [searchInput, setSearchInput] = useState('');
   const [searchResult, setSearchResult] = useState<FriendProfile | null>(null);
   const [searchError, setSearchError] = useState('');
@@ -58,115 +61,122 @@ export default function FriendsPage() {
   const [requesting, setRequesting] = useState(false);
   const [sharing, setSharing] = useState(false);
 
-  // My group IDs for shared group calculation
-  const [myGroupIds, setMyGroupIds] = useState<string[]>([]);
-
-  const loadData = useCallback(async () => {
+  useEffect(() => {
     if (!user?.uid) return;
-    setLoading(true);
+    const myUid = user.uid;
+    const logs: string[] = [];
+    function addLog(msg: string) { logs.push(msg); setDebugLog([...logs]); }
 
-    // My group memberships
-    const myGroupsSnap = await getDocs(query(collection(db, 'groupMembers'), where('userId', '==', user.uid)));
-    const gids = myGroupsSnap.docs.map(d => d.data().groupId as string);
-    setMyGroupIds(gids);
+    async function load() {
+      setLoading(true);
+      addLog(`loading for ${myUid}`);
+      try {
+        // My groups
+        const myGroupsSnap = await getDocs(query(collection(db, 'groupMembers'), where('userId', '==', myUid)));
+        const gids = myGroupsSnap.docs.map(d => d.data().groupId as string);
+        addLog(`groups: ${gids.length}`);
 
-    // My profile
-    const mySnap = await getDoc(doc(db, 'users', user.uid));
-    const myData = mySnap.data();
-    if (myData) {
-      setMyProfile({
-        uid: user.uid,
-        displayName: myData.displayName,
-        photoURL: myData.photoURL,
-        xp: myData.xp || 0,
-        xpMonth: myData.xpMonthKey === currentMonthKey() ? (myData.xpMonth || 0) : 0,
-        xpMonthKey: myData.xpMonthKey || '',
-        level: xpToLevel(myData.xp || 0).level,
-        badges: myData.badges || [],
-      });
+        // My profile
+        const mySnap = await getDoc(doc(db, 'users', myUid));
+        const myData = mySnap.data();
+        addLog(`myData: ${myData ? myData.displayName : 'null'}`);
+        if (myData) {
+          setMyProfile({
+            uid: myUid,
+            displayName: myData.displayName,
+            photoURL: myData.photoURL,
+            xp: myData.xp || 0,
+            xpMonth: myData.xpMonthKey === currentMonthKey() ? (myData.xpMonth || 0) : 0,
+            xpMonthKey: myData.xpMonthKey || '',
+            level: xpToLevel(myData.xp || 0).level,
+            badges: myData.badges || [],
+          });
+        }
+
+        // All my friendships — single field queries, filter client-side
+        const [sentSnap, recvSnap] = await Promise.all([
+          getDocs(query(collection(db, 'friendships'), where('userA', '==', myUid))),
+          getDocs(query(collection(db, 'friendships'), where('userB', '==', myUid))),
+        ]);
+        addLog(`sent: ${sentSnap.size}, recv: ${recvSnap.size}`);
+
+        type FsDoc = { id: string; userA: string; userB: string; status: string; createdAt?: unknown };
+        const sent: FsDoc[] = sentSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc,'id'>) }));
+        const recv: FsDoc[] = recvSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc,'id'>) }));
+
+        const friendUids = [
+          ...sent.filter(d => d.status === 'accepted').map(d => d.userB),
+          ...recv.filter(d => d.status === 'accepted').map(d => d.userA),
+        ];
+        addLog(`friendUids: ${friendUids.length}`);
+
+        // Pending incoming
+        const incoming: FriendRequest[] = await Promise.all(
+          recv.filter(d => d.status === 'pending').map(async d => {
+            const snap = await getDoc(doc(db, 'users', d.userA));
+            const data = snap.data();
+            return {
+              id: d.id,
+              fromUid: d.userA,
+              fromName: data?.displayName || 'Someone',
+              fromPhoto: data?.photoURL,
+              createdAt: (d.createdAt as { toDate?: () => Date })?.toDate?.() || new Date(),
+            };
+          })
+        );
+        setPendingIn(incoming);
+
+        // Friend profiles
+        const loaded = await Promise.all(friendUids.map(async fuid => {
+          const snap = await getDoc(doc(db, 'users', fuid));
+          const data = snap.data();
+          if (!data) return null;
+          const fgSnap = await getDocs(query(collection(db, 'groupMembers'), where('userId', '==', fuid)));
+          const fgids = fgSnap.docs.map(d => d.data().groupId as string);
+          const shared = fgids.filter(g => gids.includes(g)).length;
+          return {
+            uid: fuid,
+            displayName: data.displayName,
+            photoURL: data.photoURL,
+            xp: data.xp || 0,
+            xpMonth: data.xpMonthKey === currentMonthKey() ? (data.xpMonth || 0) : 0,
+            xpMonthKey: data.xpMonthKey || '',
+            level: xpToLevel(data.xp || 0).level,
+            badges: data.badges || [],
+            sharedGroups: shared,
+          } as FriendProfile;
+        }));
+        const filtered = loaded.filter((p): p is FriendProfile => p !== null);
+        addLog(`profiles loaded: ${filtered.length}`);
+        setFriends(filtered);
+      } catch (e: unknown) {
+        addLog(`ERROR: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setLoading(false);
+      }
     }
 
-    // All friendships involving me — filter status client-side (avoids needing composite indexes)
-    const [sentSnap, recvSnap] = await Promise.all([
-      getDocs(query(collection(db, 'friendships'), where('userA', '==', user.uid))),
-      getDocs(query(collection(db, 'friendships'), where('userB', '==', user.uid))),
-    ]);
-    type FsDoc = { id: string; userA: string; userB: string; status: string; createdAt?: { toDate?: () => Date } };
-    const allSent: FsDoc[] = sentSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc, 'id'>) }));
-    const allRecv: FsDoc[] = recvSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc, 'id'>) }));
-
-    const friendUids = [
-      ...allSent.filter(d => d.status === 'accepted').map(d => d.userB as string),
-      ...allRecv.filter(d => d.status === 'accepted').map(d => d.userA as string),
-    ];
-
-    // Pending incoming requests (userB == me, status pending)
-    const incoming: FriendRequest[] = await Promise.all(
-      allRecv.filter(d => d.status === 'pending').map(async d => {
-        const fromSnap = await getDoc(doc(db, 'users', d.userA as string));
-        const fromData = fromSnap.data();
-        return {
-          id: d.id,
-          fromUid: d.userA as string,
-          fromName: fromData?.displayName || 'Someone',
-          fromPhoto: fromData?.photoURL,
-          createdAt: (d.createdAt as { toDate?: () => Date })?.toDate?.() || new Date(),
-        };
-      })
-    );
-    setPendingIn(incoming);
-
-    // Load friend profiles
-    const loaded: (FriendProfile | null)[] = await Promise.all(friendUids.map(async uid => {
-      const snap = await getDoc(doc(db, 'users', uid));
-      const data = snap.data();
-      if (!data) return null;
-      // Count shared groups
-      const friendGroupsSnap = await getDocs(query(collection(db, 'groupMembers'), where('userId', '==', uid)));
-      const friendGids = friendGroupsSnap.docs.map(d => d.data().groupId as string);
-      const shared = friendGids.filter(g => gids.includes(g)).length;
-      return {
-        uid,
-        displayName: data.displayName,
-        photoURL: data.photoURL,
-        xp: data.xp || 0,
-        xpMonth: data.xpMonthKey === currentMonthKey() ? (data.xpMonth || 0) : 0,
-        xpMonthKey: data.xpMonthKey || '',
-        level: xpToLevel(data.xp || 0).level,
-        badges: data.badges || [],
-        sharedGroups: shared,
-      };
-    }));
-    setFriends(loaded.filter((p): p is FriendProfile => p !== null));
-    setLoading(false);
-  }, [user]);
-
-  useEffect(() => {
-    if (user?.uid) loadData();
+    load();
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSearch() {
     if (!searchInput.trim() || !user) return;
     setSearching(true); setSearchError(''); setSearchResult(null);
+    const myUid = user.uid;
     try {
       const input = searchInput.trim().toLowerCase();
-      // Search by username or email
-      let snap = await getDocs(query(collection(db, 'users'), where('username', '==', input), limit(1)));
-      if (snap.empty) {
-        snap = await getDocs(query(collection(db, 'users'), where('email', '==', input), limit(1)));
-      }
-      if (snap.empty) { setSearchError('No user found with that username or email'); return; }
+      let snap = await getDocs(query(collection(db, 'users'), where('username', '==', input)));
+      if (snap.empty) snap = await getDocs(query(collection(db, 'users'), where('email', '==', input)));
+      if (snap.empty) { setSearchError('No user found'); return; }
+      const foundUid = snap.docs[0].id;
       const data = snap.docs[0].data();
-      const uid = snap.docs[0].id;
-      if (uid === user.uid) { setSearchError("That's you!"); return; }
-      // Check if already friends
-      const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(user.uid, uid)));
-      if (fsSnap.exists()) {
-        const status = fsSnap.data().status;
-        setSearchError(status === 'accepted' ? 'Already friends!' : 'Friend request already sent');
+      if (foundUid === myUid) { setSearchError("That's you!"); return; }
+      const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(myUid, foundUid)));
+      if (fsSnap.exists() && fsSnap.data().status !== 'removed') {
+        setSearchError(fsSnap.data().status === 'accepted' ? 'Already friends!' : 'Request already sent');
         return;
       }
-      setSearchResult({ uid, displayName: data.displayName, photoURL: data.photoURL, xp: data.xp || 0, xpMonth: 0, xpMonthKey: '', level: xpToLevel(data.xp || 0).level, badges: data.badges || [] });
+      setSearchResult({ uid: foundUid, displayName: data.displayName, photoURL: data.photoURL, xp: data.xp || 0, xpMonth: 0, xpMonthKey: '', level: xpToLevel(data.xp || 0).level, badges: data.badges || [] });
     } finally { setSearching(false); }
   }
 
@@ -174,13 +184,11 @@ export default function FriendsPage() {
     if (!user) return;
     setRequesting(true);
     try {
-      const id = friendshipId(user.uid, toUid);
+      const myUid = user.uid;
+      const id = friendshipId(myUid, toUid);
       const [a, b] = id.split('_');
       await setDoc(doc(db, 'friendships', id), {
-        userA: a, userB: b,
-        initiator: user.uid,
-        status: 'pending',
-        createdAt: serverTimestamp(),
+        userA: a, userB: b, initiator: myUid, status: 'pending', createdAt: serverTimestamp(),
       });
       setSearchResult(null); setSearchInput(''); setShowAdd(false);
     } finally { setRequesting(false); }
@@ -188,7 +196,7 @@ export default function FriendsPage() {
 
   async function acceptRequest(id: string) {
     await updateDoc(doc(db, 'friendships', id), { status: 'accepted' });
-    await loadData();
+    window.location.reload();
   }
 
   async function declineRequest(id: string) {
@@ -199,9 +207,7 @@ export default function FriendsPage() {
   async function removeFriend(uid: string) {
     if (!user) return;
     const id = friendshipId(user.uid, uid);
-    await import('firebase/firestore').then(({ updateDoc, doc: d }) =>
-      updateDoc(d(db, 'friendships', id), { status: 'removed' })
-    );
+    await updateDoc(doc(db, 'friendships', id), { status: 'removed' });
     setFriends(prev => prev.filter(f => f.uid !== uid));
     setManagingFriend(null);
   }
@@ -220,12 +226,11 @@ export default function FriendsPage() {
         await navigator.share({ title: 'Add me on Guildly', text: "Let's be friends on Guildly!", url: link });
       } else {
         await navigator.clipboard.writeText(link);
-        alert('Friend invite link copied!');
+        alert('Invite link copied!');
       }
     } finally { setSharing(false); }
   }
 
-  // Leaderboard: me + friends sorted by xp metric
   const allProfiles = myProfile ? [myProfile, ...friends] : friends;
   const sorted = [...allProfiles].sort((a, b) =>
     tab === 'month' ? b.xpMonth - a.xpMonth : b.xp - a.xp
@@ -249,18 +254,22 @@ export default function FriendsPage() {
           </div>
         </div>
 
+        {/* Debug panel */}
+        {debugLog.length > 0 && (
+          <div className="mb-4 bg-gray-900 rounded-2xl p-3 text-xs font-mono text-green-400 space-y-0.5">
+            {debugLog.map((l, i) => <div key={i}>{l}</div>)}
+          </div>
+        )}
+
         {/* Add friend panel */}
         {showAdd && (
           <div className="bg-white rounded-3xl border border-indigo-100 p-4 mb-4 shadow-sm">
             <p className="text-sm font-semibold text-gray-700 mb-3">Find by username or email</p>
             <div className="flex gap-2">
-              <input
-                value={searchInput}
-                onChange={e => setSearchInput(e.target.value)}
+              <input value={searchInput} onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="username or email"
-                className="flex-1 px-3 py-2.5 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 text-gray-900 min-w-0"
-              />
+                className="flex-1 px-3 py-2.5 bg-gray-50 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 text-gray-900 min-w-0" />
               <button onClick={handleSearch} disabled={searching || !searchInput.trim()}
                 className="px-4 py-2.5 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-50 active:scale-95 transition-transform shrink-0">
                 {searching ? '…' : <Search size={16} />}
@@ -292,14 +301,8 @@ export default function FriendsPage() {
                 <div key={r.id} className="flex items-center gap-3 bg-white rounded-2xl border border-indigo-100 px-4 py-3">
                   <UserAvatar photoURL={r.fromPhoto} displayName={r.fromName} size="sm" />
                   <span className="flex-1 text-sm font-medium text-gray-900 truncate">{r.fromName}</span>
-                  <button onClick={() => acceptRequest(r.id)}
-                    className="p-2 bg-indigo-600 text-white rounded-xl active:scale-95 transition-transform">
-                    <Check size={15} />
-                  </button>
-                  <button onClick={() => declineRequest(r.id)}
-                    className="p-2 bg-gray-100 text-gray-500 rounded-xl active:scale-95 transition-transform">
-                    <X size={15} />
-                  </button>
+                  <button onClick={() => acceptRequest(r.id)} className="p-2 bg-indigo-600 text-white rounded-xl active:scale-95 transition-transform"><Check size={15} /></button>
+                  <button onClick={() => declineRequest(r.id)} className="p-2 bg-gray-100 text-gray-500 rounded-xl active:scale-95 transition-transform"><X size={15} /></button>
                 </div>
               ))}
             </div>
@@ -334,12 +337,8 @@ export default function FriendsPage() {
                 <div key={p.uid}
                   onClick={() => !isMe && setManagingFriend(p)}
                   className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${isMe ? 'bg-indigo-50' : 'cursor-pointer active:bg-gray-50'}`}>
-                  {/* Rank */}
                   <div className="w-7 text-center shrink-0">
-                    {medal
-                      ? <span className="text-lg">{medal}</span>
-                      : <span className="text-sm font-bold text-gray-300">{i + 1}</span>
-                    }
+                    {medal ? <span className="text-lg">{medal}</span> : <span className="text-sm font-bold text-gray-300">{i + 1}</span>}
                   </div>
                   <UserAvatar photoURL={p.photoURL} displayName={p.displayName} xp={p.xp} size="sm" />
                   <div className="flex-1 min-w-0">
@@ -347,21 +346,18 @@ export default function FriendsPage() {
                       <span className={`text-sm font-semibold truncate ${isMe ? 'text-indigo-700' : 'text-gray-900'}`}>
                         {isMe ? 'You' : p.displayName}
                       </span>
-                      {isMe && <span className="text-xs text-indigo-400 font-medium shrink-0">· you</span>}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400">Level {p.level}</span>
-                      {p.sharedGroups ? (
+                      {!!p.sharedGroups && (
                         <span className="text-xs text-gray-400 flex items-center gap-0.5">
                           <Users size={10} /> {p.sharedGroups} shared
                         </span>
-                      ) : null}
+                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className={`text-sm font-bold ${isMe ? 'text-indigo-600' : 'text-gray-700'}`}>
-                      {xpValue.toLocaleString()}
-                    </div>
+                    <div className={`text-sm font-bold ${isMe ? 'text-indigo-600' : 'text-gray-700'}`}>{xpValue.toLocaleString()}</div>
                     <div className="text-xs text-gray-400">XP</div>
                   </div>
                 </div>
@@ -370,7 +366,6 @@ export default function FriendsPage() {
           </div>
         )}
 
-        {/* Empty friends state with trophy */}
         {!loading && friends.length === 0 && (
           <div className="mt-4 bg-white rounded-3xl border border-dashed border-gray-200 p-5 text-center">
             <Trophy size={24} className="text-indigo-300 mx-auto mb-2" />
@@ -378,7 +373,8 @@ export default function FriendsPage() {
           </div>
         )}
       </div>
-      {/* Remove friend action sheet */}
+
+      {/* Remove friend sheet */}
       {managingFriend && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-end" onClick={() => setManagingFriend(null)}>
           <div className="absolute inset-0 bg-black/30" />
@@ -394,8 +390,7 @@ export default function FriendsPage() {
               className="w-full py-3.5 text-red-500 font-semibold rounded-2xl border border-red-100 active:scale-95 transition-transform text-sm">
               Remove Friend
             </button>
-            <button onClick={() => setManagingFriend(null)}
-              className="w-full py-3.5 text-gray-500 font-medium rounded-2xl mt-2 text-sm">
+            <button onClick={() => setManagingFriend(null)} className="w-full py-3.5 text-gray-500 font-medium rounded-2xl mt-2 text-sm">
               Cancel
             </button>
           </div>
