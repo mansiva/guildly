@@ -16,6 +16,17 @@ function toDate(value: unknown): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+function timeLeft(deadline: Date): { label: string; urgent: boolean } {
+  const msLeft = deadline.getTime() - Date.now();
+  if (msLeft <= 0) return { label: 'Overdue', urgent: true };
+  const mins = Math.ceil(msLeft / 60_000);
+  if (mins < 60) return { label: `${mins}m left`, urgent: true };
+  const hours = Math.ceil(msLeft / 3_600_000);
+  if (hours < 24) return { label: `${hours}h left`, urgent: true };
+  const days = Math.ceil(msLeft / 86_400_000);
+  return { label: `${days}d left`, urgent: days <= 1 };
+}
+
 interface Props {
   quest: Quest;
   userId: string;
@@ -38,11 +49,9 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
   const otherPct = Math.min(100 - myPct, Math.round(((current - myContrib) / total) * 100));
 
   const deadlineDate = toDate(quest.deadline);
-  const daysLeft = deadlineDate
-    ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000))
-    : null;
   const completed = quest.status === 'completed';
-  const urgent = !completed && daysLeft !== null && daysLeft <= 1;
+  const tl = !completed && deadlineDate ? timeLeft(deadlineDate) : null;
+  const urgent = tl?.urgent ?? false;
   const totalPct = Math.min(100, Math.round((current / total) * 100));
 
   return (
@@ -53,7 +62,7 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className="text-sm font-semibold text-gray-900 truncate">{quest.title}</span>
               {completed && <span className="text-xs text-green-600 font-medium shrink-0">✓ Done</span>}
-              {urgent && <span className="text-xs text-orange-500 font-medium shrink-0">⚠ Due today</span>}
+              {urgent && tl?.label === 'Overdue' && <span className="text-xs text-red-500 font-medium shrink-0">⚠ Overdue</span>}
               {groupLabel && <span className="text-xs text-gray-400 shrink-0">{groupLabel}</span>}
             </div>
             <div className="flex items-center gap-3">
@@ -63,9 +72,9 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
                 <div className="h-full bg-indigo-400 transition-all" style={{ width: `${otherPct}%` }} />
               </div>
               <span className="text-xs text-gray-400 shrink-0">{totalPct}%</span>
-              {daysLeft !== null && !completed && (
+              {tl && (
                 <span className={`text-xs shrink-0 ${urgent ? 'text-orange-500 font-semibold' : 'text-gray-400'}`}>
-                  {daysLeft === 0 ? 'Due today' : `${daysLeft}d left`}
+                  {tl.label}
                 </span>
               )}
             </div>

@@ -14,7 +14,8 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
 import { Group, Quest } from '@/types';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
+import { updateDoc, doc as firestoreDoc } from 'firebase/firestore';
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -57,8 +58,8 @@ function useAllGroupsQuests(groupIds: string[]) {
 // For the feed we just use the first group
 export default function DashboardPage() {
   const { user } = useAuth();
-  const router = useRouter();
   const [primaryGroupId, setPrimaryGroupId] = useState<string | null>(null);
+  const [editingQuest, setEditingQuest] = useState<{ quest: Quest; groupId: string } | null>(null);
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
   const { groups } = useUserGroups(user?.uid || null);
@@ -175,7 +176,7 @@ export default function DashboardPage() {
                         userId={user!.uid}
                         groupId={groupId}
                         groupLabel={groups.length > 1 ? grp?.emoji : undefined}
-                        onEdit={() => router.push(`/groups/${groupId}`)}
+                        onEdit={(q) => setEditingQuest({ quest: q, groupId })}
                       />
                     );
                   })}
@@ -202,6 +203,21 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+
+      {editingQuest && (
+        <QuestFormSheet
+          editing={editingQuest.quest}
+          onClose={() => setEditingQuest(null)}
+          onSave={async (data: ReturnType<typeof questFormToFirestore>) => {
+            await updateDoc(firestoreDoc(db, 'groups', editingQuest.groupId, 'quests', editingQuest.quest.id), {
+              title: data.title, description: data.description,
+              targetValue: data.targetValue, unit: data.unit,
+              difficulty: data.difficulty, duration: data.duration,
+              deadline: data.deadline, xpReward: data.xpReward,
+            });
+          }}
+        />
+      )}
     </AppShell>
   );
 }
