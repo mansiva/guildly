@@ -65,8 +65,10 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
 
   const deadlineDate = toDate(quest.deadline);
   const completed = quest.status === 'completed';
+  const overdue = !!deadlineDate && deadlineDate.getTime() < Date.now();
   const tl = !completed && deadlineDate ? timeLeft(deadlineDate) : null;
   const urgent = tl?.urgent ?? false;
+  const canLog = !completed && !overdue;
 
   const diffDot = quest.difficulty ? DIFFICULTY_DOT[quest.difficulty] : null;
 
@@ -107,7 +109,7 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
             </div>
           </div>
 
-          {!completed && (
+          {canLog && (
             <button
               onClick={e => { e.stopPropagation(); setShowLog(true); }}
               className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center active:scale-95 transition-transform shrink-0"
@@ -191,7 +193,7 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
         )}
       </div>
 
-      {showLog && (
+      {showLog && canLog && (
         <LogProgressModal quest={quest} userId={userId} groupId={groupId} onClose={() => setShowLog(false)} />
       )}
     </>
