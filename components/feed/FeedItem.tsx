@@ -1,5 +1,6 @@
 import { ActivityEntry } from '@/types';
 import { formatRelativeTime } from '@/lib/utils';
+import UserAvatar from '@/components/ui/UserAvatar';
 
 export default function FeedItem({ entry }: { entry: ActivityEntry }) {
   const time = entry.createdAt instanceof Date
@@ -8,11 +9,12 @@ export default function FeedItem({ entry }: { entry: ActivityEntry }) {
 
   return (
     <div className="flex items-start gap-3 py-3">
-      <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
-        {entry.userPhoto
-          ? <img src={entry.userPhoto} alt="" className="w-9 h-9 rounded-full object-cover" />
-          : entry.userName?.[0]?.toUpperCase() || '?'}
-      </div>
+      <UserAvatar
+        photoURL={entry.userPhoto}
+        displayName={entry.userName}
+        size="sm"
+        showLevel={false}
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-1 flex-wrap">
           <span className="font-semibold text-sm text-gray-900">{entry.userName}</span>

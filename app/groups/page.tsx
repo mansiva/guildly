@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
 import { Group, GroupMember } from '@/types';
 import { Plus, Users, Crown, UserPlus, Share2, Shield, Trash2 } from 'lucide-react';
+import UserAvatar from '@/components/ui/UserAvatar';
 import Link from 'next/link';
 
 const GROUP_EMOJIS = ['🔥', '⚡', '🚀', '🎯', '💪', '🏆', '🌟', '🎮', '🧠', '❤️', '🌿', '🎨'];
@@ -190,7 +191,7 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
   group: Group; userId: string; isOwner: boolean; isAdmin: boolean; onUpdate: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [members, setMembers] = useState<{ uid: string; displayName: string; photoURL?: string; role: string }[]>([]);
+  const [members, setMembers] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number; role: string }[]>([]);
   const [memberCount, setMemberCount] = useState(0);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -203,11 +204,16 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
     setMemberCount(memberDocs.length);
     const loaded = await Promise.all(memberDocs.map(async m => {
       const userSnap = await getDoc(doc(db, 'users', m.userId));
-      return userSnap.exists()
-        ? { uid: m.userId, role: m.role, ...userSnap.data() } as { uid: string; displayName: string; photoURL?: string; role: string }
-        : null;
+      const data = userSnap.exists() ? userSnap.data() : null;
+      return {
+        uid: m.userId,
+        role: m.role,
+        displayName: data?.displayName || 'Unknown',
+        photoURL: data?.photoURL || undefined,
+        xp: data?.xp || 0,
+      };
     }));
-    setMembers(loaded.filter(Boolean) as { uid: string; displayName: string; photoURL?: string; role: string }[]);
+    setMembers(loaded as { uid: string; displayName: string; photoURL?: string; xp: number; role: string }[]);
     setLoadingMembers(false);
   }
 
@@ -325,9 +331,12 @@ function GroupCard({ group, userId, isOwner, isAdmin, onUpdate }: {
 
                 return (
                   <div key={m.uid} className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
-                      {m.displayName?.[0]?.toUpperCase() || '?'}
-                    </div>
+                    <UserAvatar
+                      photoURL={m.photoURL}
+                      displayName={m.displayName}
+                      xp={m.xp}
+                      size="sm"
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-medium text-gray-800 truncate">{m.displayName}</span>

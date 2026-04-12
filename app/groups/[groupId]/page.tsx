@@ -10,6 +10,7 @@ import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
 import { xpToLevel } from '@/lib/utils';
 import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, X, Shield, ChevronDown, ChevronUp } from 'lucide-react';
+import UserAvatar from '@/components/ui/UserAvatar';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -66,7 +67,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [questError, setQuestError] = useState('');
 
   // Members display
-  const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; role: string }[]>([]);
+  const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number; role: string }[]>([]);
   const [showMembers, setShowMembers] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
@@ -83,9 +84,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     try {
       const loaded = await Promise.all(memberDocs.map(async m => {
         const snap = await getDoc(doc(db, 'users', m.userId));
-        return snap.exists()
-          ? { uid: m.userId, role: m.role, displayName: snap.data().displayName || 'Unknown' }
-          : { uid: m.userId, role: m.role, displayName: 'Unknown' };
+        const data = snap.exists() ? snap.data() : null;
+        return {
+          uid: m.userId,
+          role: m.role,
+          displayName: data?.displayName || 'Unknown',
+          photoURL: data?.photoURL || undefined,
+          xp: data?.xp || 0,
+        };
       }));
       setMemberProfiles(loaded);
     } finally { setLoadingMembers(false); }
@@ -317,9 +323,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                 <div className="space-y-3">
                   {memberProfiles.map(m => (
                     <div key={m.uid} className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
-                        {m.displayName?.[0]?.toUpperCase() || '?'}
-                      </div>
+                      <UserAvatar
+                        photoURL={m.photoURL}
+                        displayName={m.displayName}
+                        xp={m.xp}
+                        size="sm"
+                      />
                       <span className="text-sm font-medium text-gray-800 flex-1">{m.displayName}</span>
                       {getRoleBadge(m.role)}
                     </div>
@@ -387,7 +396,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       {showQuestForm && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowQuestForm(false)} />
-          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-10 max-h-[92vh] overflow-y-auto">
+          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-sheet max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingQuest ? 'Edit Quest' : 'New Quest'}

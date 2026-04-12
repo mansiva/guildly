@@ -29,3 +29,8 @@ input, textarea, select {
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 16px);
 }
+
+/* Bottom sheet safe padding: always at least 16px below the sheet content */
+.pb-sheet {
+  padding-bottom: max(env(safe-area-inset-bottom, 0px) + 16px, 24px);
+}

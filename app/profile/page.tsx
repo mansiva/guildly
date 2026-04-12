@@ -6,6 +6,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
 import ProgressBar from '@/components/ui/ProgressBar';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
 import { LogOut, Star } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -46,11 +47,13 @@ export default function ProfilePage() {
       <div className="px-4 pt-6">
         {/* Avatar + name */}
         <div className="flex flex-col items-center mb-8 pt-4">
-          <div className="w-24 h-24 rounded-full bg-indigo-100 flex items-center justify-center text-4xl mb-3 overflow-hidden">
-            {user?.photoURL
-              ? <img src={user.photoURL} alt="" className="w-full h-full object-cover" />
-              : <span>{userData?.displayName?.[0]?.toUpperCase() || '?'}</span>}
-          </div>
+          <UserAvatar
+            photoURL={user?.photoURL}
+            displayName={userData?.displayName || user?.displayName}
+            xp={xp}
+            size="xl"
+            className="mb-4"
+          />
           <h1 className="text-2xl font-bold text-gray-900">{userData?.displayName || user?.displayName}</h1>
           <p className="text-indigo-600 font-semibold mt-0.5">{title}</p>
           <p className="text-gray-400 text-sm">{user?.email}</p>

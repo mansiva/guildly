@@ -9,6 +9,7 @@ import { useUserGroups, useGroupQuests, useGroupFeed } from '@/hooks/useGroup';
 import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
+import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
 import { Group } from '@/types';
 import Link from 'next/link';
@@ -47,10 +48,16 @@ export default function DashboardPage() {
     <AppShell>
       <div className="px-4 pt-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <p className="text-gray-500 text-sm">Welcome back</p>
-            <h1 className="text-2xl font-bold text-gray-900">{userData?.displayName || user?.displayName} 👋</h1>
+        <div className="flex items-center gap-3 mb-5">
+          <UserAvatar
+            photoURL={user?.photoURL}
+            displayName={userData?.displayName || user?.displayName}
+            xp={userData?.xp}
+            size="lg"
+          />
+          <div className="flex-1">
+            <p className="text-gray-500 text-xs">Welcome back</p>
+            <h1 className="text-xl font-bold text-gray-900">{userData?.displayName || user?.displayName} 👋</h1>
           </div>
           <div className="text-right">
             <div className="text-sm font-bold text-indigo-600">Level {level}</div>

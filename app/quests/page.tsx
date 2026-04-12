@@ -178,21 +178,26 @@ export default function QuestsPage() {
         )}
       </div>
 
-      {/* FAB */}
+      {/* FAB — sits above bottom nav (nav ≈ 64px + safe area) */}
       {activeGroupId && (
-        <button
-          onClick={openCreate}
-          className="fixed bottom-24 right-4 z-40 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+        <div
+          className="fixed bottom-0 right-4 z-40 pb-safe"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)' }}
         >
-          <Plus size={26} />
-        </button>
+          <button
+            onClick={openCreate}
+            className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+          >
+            <Plus size={26} />
+          </button>
+        </div>
       )}
 
       {/* Quest form bottom sheet */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
-          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-10 max-h-[92vh] overflow-y-auto">
+          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-sheet max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingQuest ? 'Edit Quest' : 'New Quest'}

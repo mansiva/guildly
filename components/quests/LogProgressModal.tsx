@@ -37,17 +37,21 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4">
-      <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 z-50 flex flex-col justify-end">
+      {/* Backdrop tap to close */}
+      <div className="absolute inset-0" onClick={onClose} />
+
+      {/* Sheet */}
+      <div className="relative bg-white rounded-t-3xl w-full px-5 pt-5 pb-sheet">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg text-gray-900">Log Progress</h2>
-          <button onClick={onClose} className="p-1 rounded-full hover:bg-gray-100">
-            <X size={20} />
+          <button onClick={onClose} className="p-2 rounded-full bg-gray-100">
+            <X size={18} className="text-gray-500" />
           </button>
         </div>
-        <p className="text-sm text-gray-500 mb-1">{quest.title}</p>
-        <p className="text-xs text-gray-400 mb-4">
-          Current: {quest.currentValue} / {quest.targetValue} {quest.unit}
+        <p className="text-sm text-gray-700 font-semibold mb-0.5">{quest.title}</p>
+        <p className="text-xs text-gray-400 mb-5">
+          Progress: {quest.currentValue} / {quest.targetValue} {quest.unit}
         </p>
         <form onSubmit={handleSubmit}>
           <div className="flex items-center gap-3 mb-4">
@@ -58,16 +62,16 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
               placeholder="0"
               value={value}
               onChange={e => setValue(e.target.value)}
-              className="flex-1 px-4 py-3 bg-gray-50 rounded-2xl text-center text-2xl font-bold outline-none focus:ring-2 focus:ring-indigo-300"
+              className="flex-1 px-4 py-4 bg-gray-50 rounded-2xl text-center text-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-300 text-gray-900"
               autoFocus
             />
-            <span className="text-gray-500 font-medium">{quest.unit}</span>
+            <span className="text-gray-500 font-medium text-lg">{quest.unit}</span>
           </div>
           {error && <p className="text-red-500 text-xs text-center mb-3">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-indigo-600 text-white font-semibold rounded-2xl disabled:opacity-50 active:scale-95 transition-transform"
+            className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-2xl disabled:opacity-50 active:scale-95 transition-transform text-base"
           >
             {loading ? 'Saving...' : 'Add to Quest ⚡'}
           </button>
