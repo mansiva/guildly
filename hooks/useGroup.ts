@@ -5,20 +5,35 @@ import { doc, onSnapshot, collection, query, orderBy, where, getDoc } from 'fire
 import { db } from '@/lib/firebase';
 import { Group, Quest, ActivityEntry, GroupMember } from '@/types';
 
+function readCache<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch { return fallback; }
+}
+
+function writeCache<T>(key: string, value: T) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota — ignore */ }
+}
+
 export function useGroup(groupId: string | null) {
-  const [group, setGroup] = useState<Group | null>(null);
+  const cacheKey = groupId ? `guildly_group_${groupId}` : null;
+  const [group, setGroup] = useState<Group | null>(() => cacheKey ? readCache<Group | null>(cacheKey, null) : null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!groupId) { setLoading(false); return; }
+    if (!groupId || !cacheKey) { setLoading(false); return; }
     const unsub = onSnapshot(doc(db, 'groups', groupId), (snap) => {
       if (snap.exists()) {
-        setGroup({ id: snap.id, ...snap.data() } as Group);
+        const fresh = { id: snap.id, ...snap.data() } as Group;
+        setGroup(fresh);
+        writeCache(cacheKey, fresh);
       }
       setLoading(false);
     });
     return unsub;
-  }, [groupId]);
+  }, [groupId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return { group, loading };
 }
@@ -44,46 +59,46 @@ export function useGroupMembers(groupId: string | null) {
 }
 
 export function useUserGroups(userId: string | null) {
-  const [groups, setGroups] = useState<Group[]>([]);
+  const cacheKey = userId ? `guildly_groups_${userId}` : null;
+  const [groups, setGroups] = useState<Group[]>(() => cacheKey ? readCache<Group[]>(cacheKey, []) : []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
-    const q = query(
-      collection(db, 'groupMembers'),
-      where('userId', '==', userId)
-    );
+    if (!userId || !cacheKey) { setLoading(false); return; }
+    const q = query(collection(db, 'groupMembers'), where('userId', '==', userId));
     const unsub = onSnapshot(q, async (snap) => {
       const groupIds = snap.docs.map(d => d.data().groupId as string);
       const loaded = await Promise.all(groupIds.map(async id => {
         const gs = await getDoc(doc(db, 'groups', id));
         return gs.exists() ? { id: gs.id, ...gs.data() } as Group : null;
       }));
-      setGroups(loaded.filter(Boolean) as Group[]);
+      const valid = loaded.filter(Boolean) as Group[];
+      setGroups(valid);
+      writeCache(cacheKey, valid);
       setLoading(false);
     });
     return unsub;
-  }, [userId]);
+  }, [userId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return { groups, loading };
 }
 
 export function useGroupQuests(groupId: string | null) {
-  const [quests, setQuests] = useState<Quest[]>([]);
+  const cacheKey = groupId ? `guildly_quests_${groupId}` : null;
+  const [quests, setQuests] = useState<Quest[]>(() => cacheKey ? readCache<Quest[]>(cacheKey, []) : []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!groupId) { setLoading(false); return; }
-    const q = query(
-      collection(db, 'groups', groupId, 'quests'),
-      orderBy('createdAt', 'desc')
-    );
+    if (!groupId || !cacheKey) { setLoading(false); return; }
+    const q = query(collection(db, 'groups', groupId, 'quests'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
-      setQuests(snap.docs.map(d => ({ id: d.id, ...d.data() } as Quest)));
+      const fresh = snap.docs.map(d => ({ id: d.id, ...d.data() } as Quest));
+      setQuests(fresh);
+      writeCache(cacheKey, fresh);
       setLoading(false);
     });
     return unsub;
-  }, [groupId]);
+  }, [groupId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return { quests, loading };
 }
@@ -116,21 +131,21 @@ export function useGroupStats(groupIds: string[]) {
 }
 
 export function useGroupFeed(groupId: string | null) {
-  const [feed, setFeed] = useState<ActivityEntry[]>([]);
+  const cacheKey = groupId ? `guildly_feed_${groupId}` : null;
+  const [feed, setFeed] = useState<ActivityEntry[]>(() => cacheKey ? readCache<ActivityEntry[]>(cacheKey, []) : []);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!groupId) { setLoading(false); return; }
-    const q = query(
-      collection(db, 'groups', groupId, 'feed'),
-      orderBy('createdAt', 'desc')
-    );
+    if (!groupId || !cacheKey) { setLoading(false); return; }
+    const q = query(collection(db, 'groups', groupId, 'feed'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(q, (snap) => {
-      setFeed(snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityEntry)));
+      const fresh = snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityEntry));
+      setFeed(fresh);
+      writeCache(cacheKey, fresh);
       setLoading(false);
     });
     return unsub;
-  }, [groupId]);
+  }, [groupId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   return { feed, loading };
 }

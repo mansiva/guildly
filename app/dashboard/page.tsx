@@ -64,6 +64,8 @@ export default function DashboardPage() {
 
   const { groups } = useUserGroups(user?.uid || null);
   const groupIds = groups.map(g => g.id);
+  // Track which groups the user is admin/owner of
+  const [adminGroupIds, setAdminGroupIds] = useState<Set<string>>(new Set());
   const groupStats = useGroupStats(groupIds);
   const allActiveQuests = useAllGroupsQuests(groupIds);
   const { feed } = useGroupFeed(primaryGroupId);
@@ -74,6 +76,17 @@ export default function DashboardPage() {
   useEffect(() => {
     if (groups.length > 0 && !primaryGroupId) setPrimaryGroupId(groups[0].id);
   }, [groups]);
+
+  // Load admin/owner roles for all groups
+  useEffect(() => {
+    if (!user || groupIds.length === 0) return;
+    Promise.all(groupIds.map(async gid => {
+      const snap = await getDoc(firestoreDoc(db, 'groupMembers', `${gid}_${user.uid}`));
+      return snap.exists() && ['owner', 'admin'].includes(snap.data().role) ? gid : null;
+    })).then(results => {
+      setAdminGroupIds(new Set(results.filter(Boolean) as string[]));
+    });
+  }, [groupIds.join(','), user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user) return;
@@ -176,7 +189,7 @@ export default function DashboardPage() {
                         userId={user!.uid}
                         groupId={groupId}
                         groupLabel={groups.length > 1 ? grp?.emoji : undefined}
-                        onEdit={(q) => setEditingQuest({ quest: q, groupId })}
+                        onEdit={adminGroupIds.has(groupId) ? (q) => setEditingQuest({ quest: q, groupId }) : undefined}
                       />
                     );
                   })}
