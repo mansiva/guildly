@@ -41,8 +41,8 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
       {/* Backdrop */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Sheet — constrained to app width */}
-      <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 pb-sheet">
+      {/* Sheet */}
+      <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg text-gray-900">Log Progress</h2>
           <button onClick={onClose} className="p-2 rounded-full bg-gray-100">
@@ -77,6 +77,8 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
           >
             {loading ? 'Saving...' : 'Add to Quest ⚡'}
           </button>
+          {/* Spacer — padding-bottom on overflow containers is unreliable */}
+          <div style={{ height: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }} />
         </form>
       </div>
     </div>

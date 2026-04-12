@@ -184,7 +184,7 @@ export default function QuestsPage() {
           onClick={openCreate}
           className="fixed z-40 w-14 h-14 bg-indigo-600 text-white rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform"
           style={{
-            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 80px)',
+            bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)',
             right: '16px',
           }}
         >
@@ -196,7 +196,7 @@ export default function QuestsPage() {
       {showForm && (
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowForm(false)} />
-          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 pb-sheet max-h-[92vh] overflow-y-auto">
+          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingQuest ? 'Edit Quest' : 'New Quest'}
@@ -317,6 +317,8 @@ export default function QuestsPage() {
               >
                 {saving ? 'Saving...' : editingQuest ? 'Save Changes' : '⚡ Create Quest'}
               </button>
+              {/* Spacer to clear safe area inside scroll container */}
+              <div style={{ height: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }} />
             </div>
           </div>
         </div>
