@@ -62,7 +62,7 @@ export default function FriendsPage() {
   const [myGroupIds, setMyGroupIds] = useState<string[]>([]);
 
   const loadData = useCallback(async () => {
-    if (!user) return;
+    if (!user?.uid) return;
     setLoading(true);
 
     // My group memberships
@@ -139,7 +139,9 @@ export default function FriendsPage() {
     setLoading(false);
   }, [user]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    if (user?.uid) loadData();
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSearch() {
     if (!searchInput.trim() || !user) return;
