@@ -21,12 +21,16 @@ export default function ProfilePage() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const [userData, setUserData] = useState<{
-    displayName: string; xp: number; level: number; badges: Badge[];
+    displayName: string; xp: number; level: number; badges: Badge[]; username?: string;
   } | null>(null);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [editingUsername, setEditingUsername] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -53,6 +57,21 @@ export default function ProfilePage() {
       await updateDoc(doc(db, 'users', user.uid), { displayName: nameInput.trim() });
       setEditingName(false);
     } finally { setSavingName(false); }
+  }
+
+  async function saveUsername() {
+    if (!user || !usernameInput.trim()) return;
+    setSavingUsername(true); setUsernameError('');
+    try {
+      const { getDocs, query, collection: col, where } = await import('firebase/firestore');
+      const clean = usernameInput.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+      if (clean.length < 3) { setUsernameError('At least 3 characters'); setSavingUsername(false); return; }
+      // Check uniqueness
+      const snap = await getDocs(query(col(db, 'users'), where('username', '==', clean)));
+      if (!snap.empty && snap.docs[0].id !== user.uid) { setUsernameError('Username taken'); setSavingUsername(false); return; }
+      await updateDoc(doc(db, 'users', user.uid), { username: clean });
+      setEditingUsername(false);
+    } finally { setSavingUsername(false); }
   }
 
   const xp = userData?.xp || 0;
@@ -101,6 +120,34 @@ export default function ProfilePage() {
 
           <p className="text-indigo-600 font-semibold mt-1">{title}</p>
           <p className="text-gray-400 text-sm">{user?.email}</p>
+
+          {/* Username */}
+          {editingUsername ? (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="text-gray-400 text-sm">@</span>
+              <input
+                value={usernameInput}
+                onChange={e => setUsernameInput(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                maxLength={20} autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') saveUsername(); if (e.key === 'Escape') setEditingUsername(false); }}
+                placeholder="username"
+                className="px-3 py-1.5 bg-gray-100 text-gray-900 rounded-xl text-sm text-center outline-none focus:ring-2 focus:ring-indigo-300 w-36"
+              />
+              <button onClick={saveUsername} disabled={savingUsername || !usernameInput.trim()}
+                className="p-1.5 rounded-full bg-indigo-600 text-white disabled:opacity-50"><Check size={14} /></button>
+              <button onClick={() => { setEditingUsername(false); setUsernameError(''); }}
+                className="p-1.5 rounded-full bg-gray-100"><X size={14} className="text-gray-500" /></button>
+            </div>
+          ) : (
+            <button onClick={() => { setUsernameInput(userData?.username || ''); setEditingUsername(true); setUsernameError(''); }}
+              className="flex items-center gap-1 mt-1.5 group">
+              <span className="text-sm text-gray-400">
+                {userData?.username ? `@${userData.username}` : 'Set username'}
+              </span>
+              <Pencil size={12} className="text-gray-300 group-hover:text-indigo-400 transition-colors" />
+            </button>
+          )}
+          {usernameError && <p className="text-xs text-red-500 mt-1">{usernameError}</p>}
         </div>
 
         {/* XP / Level card */}

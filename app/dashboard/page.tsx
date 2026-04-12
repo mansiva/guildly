@@ -15,7 +15,11 @@ import { xpToLevel } from '@/lib/utils';
 import { Group, Quest } from '@/types';
 import Link from 'next/link';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
-import { updateDoc, doc as firestoreDoc } from 'firebase/firestore';
+import { updateDoc, doc as firestoreDoc, addDoc, collection, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { Plus, UserPlus, Share2 } from 'lucide-react';
+
+const GROUP_EMOJIS = ['🔥', '⚡', '🚀', '🎯', '💪', '🏆', '🌟', '🎮', '🧠', '❤️', '🌿', '🎨'];
+function generateCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -60,6 +64,14 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [primaryGroupId, setPrimaryGroupId] = useState<string | null>(null);
   const [editingQuest, setEditingQuest] = useState<{ quest: Quest; groupId: string } | null>(null);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [showJoinGroup, setShowJoinGroup] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [groupDesc, setGroupDesc] = useState('');
+  const [groupEmoji, setGroupEmoji] = useState('🔥');
+  const [joinCode, setJoinCode] = useState('');
+  const [groupFormSaving, setGroupFormSaving] = useState(false);
+  const [groupFormError, setGroupFormError] = useState('');
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
   const { groups } = useUserGroups(user?.uid || null);
@@ -130,8 +142,37 @@ export default function DashboardPage() {
   }, [groupIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { level, progress, nextLevelXp } = xpToLevel(userData?.xp || 0);
-  // Quests from primary group for feed lookup
-  const primaryGroup = groups[0];
+
+  async function createGroup() {
+    if (!user || !groupName.trim()) return;
+    setGroupFormSaving(true); setGroupFormError('');
+    try {
+      const ref = await addDoc(collection(db, 'groups'), {
+        name: groupName.trim(), description: groupDesc.trim(),
+        emoji: groupEmoji, maxMembers: 50, xp: 0, badges: [], createdAt: serverTimestamp(),
+      });
+      await setDoc(firestoreDoc(db, 'groupMembers', `${ref.id}_${user.uid}`), {
+        groupId: ref.id, userId: user.uid, role: 'owner', joinedAt: serverTimestamp(),
+      });
+      setShowCreateGroup(false); setGroupName(''); setGroupDesc(''); setGroupEmoji('🔥');
+    } catch (e: unknown) { setGroupFormError(e instanceof Error ? e.message : 'Failed'); }
+    finally { setGroupFormSaving(false); }
+  }
+
+  async function joinGroup() {
+    if (!user || !joinCode.trim()) return;
+    setGroupFormSaving(true); setGroupFormError('');
+    try {
+      const invSnap = await import('firebase/firestore').then(({ getDoc, doc: d }) => getDoc(d(db, 'invites', joinCode.trim().toUpperCase())));
+      if (!invSnap.exists() || invSnap.data().used) { setGroupFormError('Invalid or used invite code'); setGroupFormSaving(false); return; }
+      const invite = invSnap.data();
+      await setDoc(firestoreDoc(db, 'groupMembers', `${invite.groupId}_${user.uid}`), {
+        groupId: invite.groupId, userId: user.uid, role: 'member', joinedAt: serverTimestamp(),
+      });
+      setShowJoinGroup(false); setJoinCode('');
+    } catch (e: unknown) { setGroupFormError(e instanceof Error ? e.message : 'Failed'); }
+    finally { setGroupFormSaving(false); }
+  }
 
   return (
     <AppShell>
@@ -160,65 +201,114 @@ export default function DashboardPage() {
           <p className="text-xs text-gray-400 mt-1 text-right">{progress} / {nextLevelXp} XP to Level {level + 1}</p>
         </div>
 
-        {groups.length === 0 ? (
-          <div className="text-center py-16">
+        {/* Create / Join group CTAs — always visible */}
+        <div className="flex gap-2 mb-6">
+          <button onClick={() => { setShowCreateGroup(v => !v); setShowJoinGroup(false); setGroupFormError(''); }}
+            className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+            <Plus size={16} /> New Group
+          </button>
+          <button onClick={() => { setShowJoinGroup(v => !v); setShowCreateGroup(false); setGroupFormError(''); }}
+            className="flex-1 py-3 border border-indigo-200 text-indigo-600 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+            <UserPlus size={16} /> Join Group
+          </button>
+        </div>
+
+        {/* Inline create form */}
+        {showCreateGroup && (
+          <div className="bg-white rounded-3xl p-4 mb-4 border border-indigo-100 shadow-sm">
+            <h3 className="font-bold text-gray-900 mb-3">Create Group</h3>
+            <div className="flex gap-2 flex-wrap mb-3">
+              {GROUP_EMOJIS.map(e => (
+                <button key={e} onClick={() => setGroupEmoji(e)}
+                  className={`text-2xl p-2 rounded-xl transition-all ${groupEmoji === e ? 'bg-indigo-100 scale-110' : 'hover:bg-gray-100'}`}>{e}</button>
+              ))}
+            </div>
+            <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="Group name" maxLength={40}
+              className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-2 outline-none focus:ring-2 focus:ring-indigo-200" />
+            <input value={groupDesc} onChange={e => setGroupDesc(e.target.value)} placeholder="Description (optional)" maxLength={100}
+              className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200" />
+            {groupFormError && <p className="text-red-500 text-xs mb-2">{groupFormError}</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowCreateGroup(false)} className="flex-1 py-3 border border-gray-200 text-gray-700 rounded-2xl text-sm">Cancel</button>
+              <button onClick={createGroup} disabled={groupFormSaving || !groupName.trim()}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-50">
+                {groupFormSaving ? '…' : `Create ${groupEmoji}`}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Inline join form */}
+        {showJoinGroup && (
+          <div className="bg-white rounded-3xl p-4 mb-4 border border-indigo-100 shadow-sm">
+            <h3 className="font-bold text-gray-900 mb-3">Join a Group</h3>
+            <input value={joinCode} onChange={e => setJoinCode(e.target.value.toUpperCase())} placeholder="INVITE CODE"
+              maxLength={8} className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm mb-3 outline-none focus:ring-2 focus:ring-indigo-200 tracking-widest text-center font-mono text-lg uppercase" />
+            {groupFormError && <p className="text-red-500 text-xs mb-2 text-center">{groupFormError}</p>}
+            <div className="flex gap-2">
+              <button onClick={() => setShowJoinGroup(false)} className="flex-1 py-3 border border-gray-200 text-gray-700 rounded-2xl text-sm">Cancel</button>
+              <button onClick={joinGroup} disabled={groupFormSaving || !joinCode.trim()}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold disabled:opacity-50">
+                {groupFormSaving ? '…' : 'Join'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {groups.length === 0 && !showCreateGroup && !showJoinGroup ? (
+          <div className="text-center py-12">
             <div className="text-5xl mb-4">🚀</div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">Start your first quest</h2>
-            <p className="text-gray-500 text-sm mb-6">Create a group and invite your crew to begin</p>
-            <Link href="/groups" className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-2xl inline-block">
-              Create a Group
-            </Link>
+            <p className="text-gray-500 text-sm">Create a group and invite your crew to begin</p>
           </div>
         ) : (
           <>
             {/* My Groups */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-gray-900">My Groups</h2>
-                <Link href="/groups" className="text-sm text-indigo-600 font-medium">See all</Link>
+            {groups.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-bold text-gray-900">My Groups</h2>
+                  <Link href="/groups" className="text-sm text-indigo-600 font-medium">See all</Link>
+                </div>
+                <div className="space-y-3">
+                  {groups.map((g: Group) => (
+                    <GroupCard key={g.id} group={g}
+                      memberCount={groupStats[g.id]?.memberCount ?? 0}
+                      activeQuestCount={groupStats[g.id]?.activeQuestCount ?? 0}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="space-y-3">
-                {groups.map((g: Group) => (
-                  <GroupCard
-                    key={g.id}
-                    group={g}
-                    memberCount={groupStats[g.id]?.memberCount ?? 0}
-                    activeQuestCount={groupStats[g.id]?.activeQuestCount ?? 0}
-                  />
-                ))}
-              </div>
-            </div>
+            )}
 
             {/* Active quests — all groups, sorted by time left */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-gray-900">Active Quests</h2>
-                <Link href="/quests" className="text-sm text-indigo-600 font-medium">See all</Link>
+            {groups.length > 0 && (
+              <div className="mb-6">
+                <h2 className="font-bold text-gray-900 mb-3">Active Quests</h2>
+                {allActiveQuests.length === 0 ? (
+                  <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-gray-200">
+                    <p className="text-gray-400 text-sm">No active quests — open a group to add one</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {allActiveQuests.map(({ quest, groupId }) => {
+                      const grp = groups.find(g => g.id === groupId);
+                      return (
+                        <CompactQuestRow
+                          key={`${groupId}-${quest.id}`}
+                          quest={quest}
+                          userId={user!.uid}
+                          groupId={groupId}
+                          groupLabel={grp ? `${grp.emoji} ${grp.name}` : undefined}
+                          members={membersByGroup[groupId] || []}
+                          onEdit={adminGroupIds.has(groupId) ? (q) => setEditingQuest({ quest: q, groupId }) : undefined}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-              {allActiveQuests.length === 0 ? (
-                <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-gray-200">
-                  <p className="text-gray-400 text-sm">No active quests</p>
-                  <Link href="/quests" className="text-indigo-600 text-sm font-medium mt-1 inline-block">+ Add quest</Link>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {allActiveQuests.map(({ quest, groupId }) => {
-                    const grp = groups.find(g => g.id === groupId);
-                    return (
-                      <CompactQuestRow
-                        key={`${groupId}-${quest.id}`}
-                        quest={quest}
-                        userId={user!.uid}
-                        groupId={groupId}
-                        groupLabel={groups.length > 1 ? grp?.emoji : undefined}
-                        members={membersByGroup[groupId] || []}
-                        onEdit={adminGroupIds.has(groupId) ? (q) => setEditingQuest({ quest: q, groupId }) : undefined}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Feed — from primary group */}
             {feed.length > 0 && (
@@ -226,9 +316,7 @@ export default function DashboardPage() {
                 <h2 className="font-bold text-gray-900 mb-3">Recent Activity</h2>
                 <div className="bg-white rounded-3xl px-4 divide-y divide-gray-100 border border-gray-100">
                   {feed.slice(0, 8).map(entry => (
-                    <FeedItem
-                      key={entry.id}
-                      entry={entry}
+                    <FeedItem key={entry.id} entry={entry}
                       members={memberProfiles}
                       quests={allActiveQuests.filter(a => a.groupId === primaryGroupId).map(a => ({ id: a.quest.id, title: a.quest.title }))}
                     />

@@ -68,9 +68,12 @@ export async function POST(req: NextRequest) {
       emoji: b.emoji, tier: b.tier, earnedAt: new Date().toISOString(),
     }));
 
+    const monthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const monthReset = userData.xpMonthKey !== monthKey ? { xpMonth: immediateXp + badgeXp, xpMonthKey: monthKey } : { xpMonth: FieldValue.increment(immediateXp + badgeXp) };
     await userRef.update({
       xp: FieldValue.increment(immediateXp + badgeXp),
       logsCount: FieldValue.increment(1),
+      ...monthReset,
       ...(newBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...newBadgeObjs) } : {}),
     });
 
@@ -145,9 +148,12 @@ export async function POST(req: NextRequest) {
           emoji: b.emoji, tier: b.tier, earnedAt: new Date().toISOString(),
         }));
 
+        const cMonthKey = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        const cMonthReset = cUserData.xpMonthKey !== cMonthKey ? { xpMonth: totalPayout + cBadgeXp, xpMonthKey: cMonthKey } : { xpMonth: FieldValue.increment(totalPayout + cBadgeXp) };
         completionUpdates.push(cUserRef.update({
           xp: FieldValue.increment(totalPayout + cBadgeXp),
           questsCompleted: FieldValue.increment(1),
+          ...cMonthReset,
           ...(uid === topUid ? { questsLed: FieldValue.increment(1) } : {}),
           ...(cBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...cBadgeObjs) } : {}),
         }));

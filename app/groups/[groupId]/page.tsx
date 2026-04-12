@@ -51,6 +51,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [showQuestForm, setShowQuestForm] = useState(false);
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
+  const [friendStatuses, setFriendStatuses] = useState<Record<string, 'none' | 'pending' | 'accepted'>>({});
+
+  function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 
   const [memberProfiles, setMemberProfiles] = useState<{
     uid: string; displayName: string; photoURL?: string; xp: number; role: string;
@@ -71,7 +74,17 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const snap = await getDoc(doc(db, 'users', m.userId));
       const data = snap.exists() ? snap.data() : null;
       return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
-    })).then(loaded => { setMemberProfiles(loaded); setLoadingMembers(false); });
+    })).then(async loaded => {
+      setMemberProfiles(loaded);
+      setLoadingMembers(false);
+      if (!user) return;
+      const statuses: Record<string, 'none' | 'pending' | 'accepted'> = {};
+      await Promise.all(loaded.filter(m => m.uid !== user.uid).map(async m => {
+        const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(user.uid, m.uid)));
+        statuses[m.uid] = fsSnap.exists() ? fsSnap.data().status as 'pending' | 'accepted' : 'none';
+      }));
+      setFriendStatuses(statuses);
+    });
   }, [memberDocs]);
 
   if (!group) return (
@@ -140,6 +153,16 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     } catch (e) {
       console.error(e); alert('Failed to delete group.'); setDeleting(false);
     }
+  }
+
+  async function sendFriendRequest(toUid: string) {
+    if (!user) return;
+    const id = friendshipId(user.uid, toUid);
+    const [a, b] = id.split('_');
+    await setDoc(doc(db, 'friendships', id), {
+      userA: a, userB: b, initiator: user.uid, status: 'pending', createdAt: serverTimestamp(),
+    });
+    setFriendStatuses(prev => ({ ...prev, [toUid]: 'pending' }));
   }
 
   async function handlePromote(uid: string) {
@@ -278,6 +301,17 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="text-xs font-bold text-indigo-600">{m.xp} XP</div>
+                        {m.uid !== user?.uid && (() => {
+                          const fs = friendStatuses[m.uid];
+                          if (fs === 'accepted') return <span className="text-xs text-green-500 font-medium">Friends</span>;
+                          if (fs === 'pending') return <span className="text-xs text-gray-400">Pending</span>;
+                          return (
+                            <button onClick={e => { e.stopPropagation(); sendFriendRequest(m.uid); }}
+                              className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 active:scale-95 transition-transform">
+                              <UserPlus size={13} />
+                            </button>
+                          );
+                        })()}
                         {tappable && <ChevronRight size={14} className="text-gray-300" />}
                       </div>
                     </div>
