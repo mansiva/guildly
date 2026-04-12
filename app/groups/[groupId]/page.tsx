@@ -5,22 +5,34 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import AppShell from '@/components/layout/AppShell';
 import { useGroup, useGroupQuests, useGroupFeed, useGroupMembers } from '@/hooks/useGroup';
-import QuestCard from '@/components/quests/QuestCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
-import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, X, Shield, ChevronDown, ChevronUp } from 'lucide-react';
 import UserAvatar from '@/components/ui/UserAvatar';
+import { xpToLevel } from '@/lib/utils';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, X, Shield, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import Link from 'next/link';
+import LogProgressModal from '@/components/quests/LogProgressModal';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
   getDocs, query, where, getDoc, setDoc
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Quest } from '@/types';
+import { CATEGORY_COLORS, CATEGORY_LABELS } from '@/lib/quest-templates';
+import { cn } from '@/lib/utils';
 
 function generateCode(): string {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  const d = new Date(value as string | number);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 const XP_OPTIONS = [50, 100, 250, 500];
@@ -48,6 +60,98 @@ const EMPTY_FORM: QuestForm = {
   deadline: '',
 };
 
+// Compact quest row with expand-on-tap
+function CompactQuestRow({ quest, userId, groupId, onEdit }: {
+  quest: Quest; userId: string; groupId: string; onEdit?: (q: Quest) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  const pct = Math.min(100, Math.round((quest.currentValue / quest.targetValue) * 100));
+  const deadlineDate = toDate(quest.deadline);
+  const daysLeft = deadlineDate
+    ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000))
+    : null;
+  const completed = quest.status === 'completed';
+
+  return (
+    <>
+      <div className={cn('bg-white rounded-2xl border overflow-hidden', completed ? 'border-green-200' : 'border-gray-100')}>
+        {/* Compact row */}
+        <button
+          className="w-full flex items-center gap-3 px-4 py-3 text-left"
+          onClick={() => setExpanded(v => !v)}
+        >
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-semibold text-gray-900 truncate">{quest.title}</span>
+              {completed && <span className="text-xs text-green-600 font-medium shrink-0">✓ Done</span>}
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Mini progress bar */}
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-indigo-500 rounded-full transition-all"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-400 shrink-0">{pct}%</span>
+              {daysLeft !== null && !completed && (
+                <span className="text-xs text-gray-400 shrink-0">{daysLeft}d left</span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!completed && (
+              <button
+                onClick={e => { e.stopPropagation(); setShowLog(true); }}
+                className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <Plus size={16} />
+              </button>
+            )}
+            {expanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+          </div>
+        </button>
+
+        {/* Expanded detail */}
+        {expanded && (
+          <div className="px-4 pb-4 border-t border-gray-50">
+            <div className="flex items-center gap-2 mt-3 mb-2">
+              <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', CATEGORY_COLORS[quest.category])}>
+                {CATEGORY_LABELS[quest.category]}
+              </span>
+              <span className="text-xs text-indigo-600 font-bold ml-auto">+{quest.xpReward} XP</span>
+            </div>
+            {quest.description && <p className="text-xs text-gray-500 mb-2">{quest.description}</p>}
+            <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+              <span>{quest.currentValue} / {quest.targetValue} {quest.unit}</span>
+              <span>My contribution: {quest.contributions?.[userId] || 0} {quest.unit}</span>
+            </div>
+            <ProgressBar value={quest.currentValue} max={quest.targetValue} showLabel />
+            {onEdit && (
+              <button
+                onClick={() => onEdit(quest)}
+                className="mt-3 text-xs text-indigo-500 font-medium"
+              >
+                Edit quest
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showLog && (
+        <LogProgressModal
+          quest={quest}
+          userId={userId}
+          groupId={groupId}
+          onClose={() => setShowLog(false)}
+        />
+      )}
+    </>
+  );
+}
+
 export default function GroupDetailPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
   const { user } = useAuth();
@@ -66,9 +170,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [savingQuest, setSavingQuest] = useState(false);
   const [questError, setQuestError] = useState('');
 
-  // Members display
-  const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number; role: string }[]>([]);
-  const [showMembers, setShowMembers] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState<{
+    uid: string; displayName: string; photoURL?: string; xp: number; role: string;
+  }[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
@@ -78,29 +182,25 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     });
   }, [groupId, user]);
 
-  async function loadMemberProfiles() {
-    if (memberProfiles.length > 0) return; // already loaded
+  // Auto-load members
+  useEffect(() => {
+    if (memberDocs.length === 0) return;
     setLoadingMembers(true);
-    try {
-      const loaded = await Promise.all(memberDocs.map(async m => {
-        const snap = await getDoc(doc(db, 'users', m.userId));
-        const data = snap.exists() ? snap.data() : null;
-        return {
-          uid: m.userId,
-          role: m.role,
-          displayName: data?.displayName || 'Unknown',
-          photoURL: data?.photoURL || undefined,
-          xp: data?.xp || 0,
-        };
-      }));
+    Promise.all(memberDocs.map(async m => {
+      const snap = await getDoc(doc(db, 'users', m.userId));
+      const data = snap.exists() ? snap.data() : null;
+      return {
+        uid: m.userId,
+        role: m.role,
+        displayName: data?.displayName || 'Unknown',
+        photoURL: data?.photoURL || undefined,
+        xp: data?.xp || 0,
+      };
+    })).then(loaded => {
       setMemberProfiles(loaded);
-    } finally { setLoadingMembers(false); }
-  }
-
-  function handleToggleMembers() {
-    if (!showMembers) loadMemberProfiles();
-    setShowMembers(v => !v);
-  }
+      setLoadingMembers(false);
+    });
+  }, [memberDocs]);
 
   if (!group) return (
     <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
@@ -111,6 +211,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const { level, progress, nextLevelXp } = xpToLevel(group.xp || 0);
   const isOwner = userRole === 'owner';
   const isAdmin = userRole === 'owner' || userRole === 'admin';
+
+  // Compute each member's XP contribution from quest contributions
+  function getMemberQuestXp(uid: string): number {
+    return quests.reduce((sum, q) => sum + (q.contributions?.[uid] || 0), 0);
+  }
 
   async function handleInvite() {
     setSharing(true);
@@ -126,13 +231,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       });
       const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
       const link = `${base}/join/${code}`;
-      const title = `Join ${group?.name} on Guildly`;
-      const text = `You've been invited to join "${group?.name}" on Guildly. Tap the link to join!`;
       if (navigator.share) {
-        await navigator.share({ title, text, url: link });
+        await navigator.share({ title: `Join ${group?.name} on Guildly`, text: `Join "${group?.name}" on Guildly!`, url: link });
       } else {
         await navigator.clipboard.writeText(link);
-        alert('Invite link copied to clipboard!');
+        alert('Invite link copied!');
       }
     } catch (e) {
       if ((e as Error).name !== 'AbortError') console.error(e);
@@ -140,8 +243,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   }
 
   async function handleDelete() {
-    if (!isOwner) return;
-    if (!confirm(`Delete "${group?.name}"? This cannot be undone.`)) return;
+    if (!isOwner || !confirm(`Delete "${group?.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
       for (const sub of ['quests', 'feed']) {
@@ -172,10 +274,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     setEditingQuest(quest);
     let deadlineStr = '';
     if (quest.deadline) {
-      const d = typeof quest.deadline === 'object' && 'toDate' in quest.deadline
-        ? (quest.deadline as unknown as { toDate: () => Date }).toDate()
-        : new Date(quest.deadline as unknown as string);
-      if (!isNaN(d.getTime())) deadlineStr = d.toISOString().split('T')[0];
+      const d = toDate(quest.deadline);
+      if (d) deadlineStr = d.toISOString().split('T')[0];
     }
     setQuestForm({
       title: quest.title,
@@ -205,9 +305,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           title: questForm.title.trim(),
           description: questForm.description.trim(),
           targetValue: Number(questForm.targetValue),
-          unit,
-          xpReward,
-          deadline,
+          unit, xpReward, deadline,
         });
       } else {
         await addDoc(collection(db, 'groups', groupId, 'quests'), {
@@ -216,12 +314,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           description: questForm.description.trim(),
           category: 'custom',
           targetValue: Number(questForm.targetValue),
-          unit,
-          currentValue: 0,
-          contributions: {},
-          status: 'active',
-          xpReward,
-          deadline,
+          unit, currentValue: 0, contributions: {},
+          status: 'active', xpReward, deadline,
           createdAt: serverTimestamp(),
           createdBy: user!.uid,
         });
@@ -237,13 +331,13 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
 
   function getRoleBadge(role: string) {
     if (role === 'owner') return (
-      <span className="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium flex items-center gap-1">
-        <Crown size={10} /> Owner
+      <span className="text-xs px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-medium flex items-center gap-0.5">
+        <Crown size={9} /> Owner
       </span>
     );
     if (role === 'admin') return (
-      <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium flex items-center gap-1">
-        <Shield size={10} /> Admin
+      <span className="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium flex items-center gap-0.5">
+        <Shield size={9} /> Admin
       </span>
     );
     return null;
@@ -274,6 +368,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           </div>
         </div>
 
+        {/* XP bar — above action buttons */}
+        <div className="mb-4">
+          <ProgressBar value={progress} max={nextLevelXp} color="bg-gradient-to-r from-indigo-500 to-purple-500" />
+          <p className="text-xs text-gray-400 mt-1 text-right">Group XP to Level {level + 1}</p>
+        </div>
+
         {/* Admin action bar */}
         {isAdmin && (
           <div className="flex gap-2 mb-5">
@@ -294,62 +394,52 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           </div>
         )}
 
-        {/* XP bar */}
-        <div className="mb-6">
-          <ProgressBar value={progress} max={nextLevelXp} color="bg-gradient-to-r from-indigo-500 to-purple-500" />
-          <p className="text-xs text-gray-400 mt-1 text-right">Group XP to Level {level + 1}</p>
-        </div>
-
-        {/* Members section */}
-        <div className="mb-6">
-          <button
-            onClick={handleToggleMembers}
-            className="w-full flex items-center justify-between py-3 px-4 bg-white rounded-2xl border border-gray-100 shadow-sm"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
-              <Users size={16} className="text-indigo-500" />
-              Members ({memberDocs.length})
-            </div>
-            {showMembers ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
-          </button>
-
-          {showMembers && (
-            <div className="mt-2 bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-              {loadingMembers ? (
-                <p className="text-xs text-gray-400 text-center py-2">Loading...</p>
-              ) : memberProfiles.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-2">No members found</p>
-              ) : (
-                <div className="space-y-3">
-                  {memberProfiles.map(m => (
-                    <div key={m.uid} className="flex items-center gap-3">
-                      <UserAvatar
-                        photoURL={m.photoURL}
-                        displayName={m.displayName}
-                        xp={m.xp}
-                        size="sm"
-                      />
-                      <span className="text-sm font-medium text-gray-800 flex-1">{m.displayName}</span>
-                      {getRoleBadge(m.role)}
+        {/* Members — always expanded */}
+        <div className="mb-5">
+          <h2 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
+            <Users size={15} className="text-indigo-500" /> Members ({memberDocs.length})
+          </h2>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+            {loadingMembers ? (
+              <p className="text-xs text-gray-400 text-center py-2">Loading...</p>
+            ) : (
+              <div className="divide-y divide-gray-50">
+                {memberProfiles.map(m => {
+                  const questXp = getMemberQuestXp(m.uid);
+                  return (
+                    <div key={m.uid} className="flex items-center gap-3 py-2.5">
+                      <UserAvatar photoURL={m.photoURL} displayName={m.displayName} xp={m.xp} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium text-gray-800 truncate">{m.displayName}</span>
+                          {getRoleBadge(m.role)}
+                        </div>
+                        {questXp > 0 && (
+                          <p className="text-xs text-indigo-500 font-medium">{questXp} {questXp === 1 ? 'contribution' : 'contributions'}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-xs font-bold text-indigo-600">{m.xp} XP</div>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Active quests */}
-        <div className="mb-6">
-          <h2 className="font-bold text-gray-900 mb-3">Active Quests ({activeQuests.length})</h2>
+        {/* Active quests — compact */}
+        <div className="mb-5">
+          <h2 className="font-bold text-gray-900 mb-2">Active Quests ({activeQuests.length})</h2>
           {activeQuests.length === 0 ? (
-            <div className="bg-white rounded-3xl p-6 text-center border border-dashed border-gray-200">
+            <div className="bg-white rounded-2xl p-5 text-center border border-dashed border-gray-200">
               <p className="text-gray-400 text-sm">{isAdmin ? 'No active quests — tap "+ Quest" to add one' : 'No active quests yet'}</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {activeQuests.map(q => (
-                <QuestCard
+                <CompactQuestRow
                   key={q.id}
                   quest={q}
                   userId={user!.uid}
@@ -363,16 +453,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
 
         {/* Completed quests */}
         {completedQuests.length > 0 && (
-          <div className="mb-6">
-            <h2 className="font-bold text-gray-900 mb-3">Completed ✓</h2>
+          <div className="mb-5">
+            <h2 className="font-bold text-gray-900 mb-2">Completed ✓</h2>
             <div className="space-y-2">
               {completedQuests.slice(0, 3).map(q => (
-                <QuestCard
-                  key={q.id}
-                  quest={q}
-                  userId={user!.uid}
-                  groupId={groupId}
-                />
+                <CompactQuestRow key={q.id} quest={q} userId={user!.uid} groupId={groupId} />
               ))}
             </div>
           </div>
@@ -382,7 +467,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         <div className="mb-4">
           <h2 className="font-bold text-gray-900 mb-3">Activity Feed</h2>
           {feed.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">Nothing yet — complete a quest to get started!</p>
+            <p className="text-gray-400 text-sm text-center py-4">Nothing yet — log progress to get started!</p>
           ) : (
             <div className="bg-white rounded-3xl px-4 divide-y divide-gray-100 border border-gray-100">
               {feed.slice(0, 20).map(e => <FeedItem key={e.id} entry={e} />)}
@@ -407,117 +492,68 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             </div>
 
             <div className="space-y-4">
-              {/* Name */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Quest Name *</label>
-                <input
-                  value={questForm.title}
-                  onChange={e => setQuestForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g. Run 5km every day"
-                  maxLength={60}
-                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                />
+                <input value={questForm.title} onChange={e => setQuestForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder="e.g. Run 5km every day" maxLength={60}
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
-
-              {/* Description */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
-                  Description <span className="normal-case font-normal">(optional)</span>
-                </label>
-                <textarea
-                  value={questForm.description}
-                  onChange={e => setQuestForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="What needs to be done?"
-                  maxLength={200}
-                  rows={2}
-                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-none"
-                />
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Description <span className="normal-case font-normal">(optional)</span></label>
+                <textarea value={questForm.description} onChange={e => setQuestForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="What needs to be done?" maxLength={200} rows={2}
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200 resize-none" />
               </div>
-
-              {/* Goal */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Goal *</label>
                 <div className="flex gap-2">
-                  <input
-                    type="number"
-                    value={questForm.targetValue}
-                    onChange={e => setQuestForm(f => ({ ...f, targetValue: e.target.value }))}
-                    placeholder="30"
-                    min="1"
-                    className="w-28 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                  <select
-                    value={questForm.unit}
-                    onChange={e => setQuestForm(f => ({ ...f, unit: e.target.value }))}
-                    className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  >
+                  <input type="number" value={questForm.targetValue} onChange={e => setQuestForm(f => ({ ...f, targetValue: e.target.value }))}
+                    placeholder="30" min="1"
+                    className="w-28 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
+                  <select value={questForm.unit} onChange={e => setQuestForm(f => ({ ...f, unit: e.target.value }))}
+                    className="flex-1 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200">
                     {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
                     <option value="custom">custom...</option>
                   </select>
                 </div>
                 {questForm.unit === 'custom' && (
-                  <input
-                    value={questForm.customUnit}
-                    onChange={e => setQuestForm(f => ({ ...f, customUnit: e.target.value }))}
+                  <input value={questForm.customUnit} onChange={e => setQuestForm(f => ({ ...f, customUnit: e.target.value }))}
                     placeholder="e.g. chapters, workouts"
-                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
+                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
                 )}
               </div>
-
-              {/* XP Reward */}
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 block">XP Reward</label>
                 <div className="flex gap-2 flex-wrap">
                   {XP_OPTIONS.map(xp => (
-                    <button key={xp}
-                      onClick={() => setQuestForm(f => ({ ...f, xpReward: xp }))}
+                    <button key={xp} onClick={() => setQuestForm(f => ({ ...f, xpReward: xp }))}
                       className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${questForm.xpReward === xp ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                       {xp} XP
                     </button>
                   ))}
-                  <button
-                    onClick={() => setQuestForm(f => ({ ...f, xpReward: 'custom' }))}
+                  <button onClick={() => setQuestForm(f => ({ ...f, xpReward: 'custom' }))}
                     className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${questForm.xpReward === 'custom' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
                     Custom
                   </button>
                 </div>
                 {questForm.xpReward === 'custom' && (
-                  <input
-                    type="number"
-                    value={questForm.customXp}
-                    onChange={e => setQuestForm(f => ({ ...f, customXp: e.target.value }))}
-                    placeholder="e.g. 750"
-                    min="1"
-                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
+                  <input type="number" value={questForm.customXp} onChange={e => setQuestForm(f => ({ ...f, customXp: e.target.value }))}
+                    placeholder="e.g. 750" min="1"
+                    className="w-full mt-2 px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
                 )}
               </div>
-
-              {/* Deadline */}
               <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
-                  Deadline <span className="normal-case font-normal">(optional)</span>
-                </label>
-                <input
-                  type="date"
-                  value={questForm.deadline}
-                  min={new Date().toISOString().split('T')[0]}
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Deadline <span className="normal-case font-normal">(optional)</span></label>
+                <input type="date" value={questForm.deadline} min={new Date().toISOString().split('T')[0]}
                   onChange={e => setQuestForm(f => ({ ...f, deadline: e.target.value }))}
-                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-                />
+                  className="w-full px-4 py-3 bg-gray-50 text-gray-900 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-200" />
               </div>
-
               {questError && <p className="text-red-500 text-sm text-center">{questError}</p>}
-
-              <button
-                onClick={handleSaveQuest}
+              <button onClick={handleSaveQuest}
                 disabled={savingQuest || !questForm.title.trim() || !questForm.targetValue}
-                className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm active:scale-95 transition-transform disabled:opacity-50 mt-2"
-              >
+                className="w-full py-4 bg-indigo-600 text-white font-bold rounded-2xl text-sm active:scale-95 transition-transform disabled:opacity-50 mt-2">
                 {savingQuest ? 'Saving...' : editingQuest ? 'Save Changes' : '⚡ Create Quest'}
               </button>
-
             </div>
           </div>
         </div>

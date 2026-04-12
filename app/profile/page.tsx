@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
 import ProgressBar from '@/components/ui/ProgressBar';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
-import { LogOut, Star } from 'lucide-react';
+import { LogOut, Star, Pencil, Check, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/types';
 
@@ -24,6 +24,10 @@ export default function ProfilePage() {
     displayName: string; xp: number; level: number; badges: Badge[];
   } | null>(null);
 
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
@@ -37,10 +41,25 @@ export default function ProfilePage() {
     router.replace('/login');
   }
 
+  function startEditName() {
+    setNameInput(userData?.displayName || user?.displayName || '');
+    setEditingName(true);
+  }
+
+  async function saveName() {
+    if (!user || !nameInput.trim()) return;
+    setSavingName(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { displayName: nameInput.trim() });
+      setEditingName(false);
+    } finally { setSavingName(false); }
+  }
+
   const xp = userData?.xp || 0;
   const { level, progress, nextLevelXp } = xpToLevel(xp);
   const title = LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)];
   const badges = userData?.badges || [];
+  const displayName = userData?.displayName || user?.displayName || '';
 
   return (
     <AppShell>
@@ -49,13 +68,38 @@ export default function ProfilePage() {
         <div className="flex flex-col items-center mb-8 pt-4">
           <UserAvatar
             photoURL={user?.photoURL}
-            displayName={userData?.displayName || user?.displayName}
+            displayName={displayName}
             xp={xp}
             size="xl"
             className="mb-4"
           />
-          <h1 className="text-2xl font-bold text-gray-900">{userData?.displayName || user?.displayName}</h1>
-          <p className="text-indigo-600 font-semibold mt-0.5">{title}</p>
+
+          {editingName ? (
+            <div className="flex items-center gap-2 mt-1">
+              <input
+                value={nameInput}
+                onChange={e => setNameInput(e.target.value)}
+                maxLength={40}
+                autoFocus
+                onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+                className="px-3 py-2 bg-gray-100 text-gray-900 rounded-xl text-lg font-bold text-center outline-none focus:ring-2 focus:ring-indigo-300 w-48"
+              />
+              <button onClick={saveName} disabled={savingName || !nameInput.trim()}
+                className="p-2 rounded-full bg-indigo-600 text-white disabled:opacity-50">
+                <Check size={16} />
+              </button>
+              <button onClick={() => setEditingName(false)} className="p-2 rounded-full bg-gray-100">
+                <X size={16} className="text-gray-500" />
+              </button>
+            </div>
+          ) : (
+            <button onClick={startEditName} className="flex items-center gap-2 group mt-1">
+              <h1 className="text-2xl font-bold text-gray-900">{displayName}</h1>
+              <Pencil size={15} className="text-gray-400 group-hover:text-indigo-500 transition-colors" />
+            </button>
+          )}
+
+          <p className="text-indigo-600 font-semibold mt-1">{title}</p>
           <p className="text-gray-400 text-sm">{user?.email}</p>
         </div>
 
