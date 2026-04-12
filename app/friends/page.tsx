@@ -149,25 +149,46 @@ export default function FriendsPage() {
     load();
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const [searchResults, setSearchResults] = useState<FriendProfile[]>([]);
+
   async function handleSearch() {
     if (!searchInput.trim() || !user) return;
-    setSearching(true); setSearchError(''); setSearchResult(null);
+    setSearching(true); setSearchError(''); setSearchResult(null); setSearchResults([]);
     const myUid = user.uid;
     try {
       const input = searchInput.trim().toLowerCase();
-      // Search by display name (case-insensitive via stored lowercase field) or email
-      let snap = await getDocs(query(collection(db, 'users'), where('displayNameLower', '==', input)));
-      if (snap.empty) snap = await getDocs(query(collection(db, 'users'), where('email', '==', input)));
-      if (snap.empty) { setSearchError('No user found'); return; }
-      const foundUid = snap.docs[0].id;
-      const data = snap.docs[0].data();
-      if (foundUid === myUid) { setSearchError("That's you!"); return; }
-      const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(myUid, foundUid)));
-      if (fsSnap.exists() && fsSnap.data().status !== 'removed') {
-        setSearchError(fsSnap.data().status === 'accepted' ? 'Already friends!' : 'Request already sent');
-        return;
+
+      // Prefix match on displayNameLower (e.g. "ruby" matches "ruby astrid tovar cardenas")
+      // Also try exact email match
+      const [nameSnap, emailSnap] = await Promise.all([
+        getDocs(query(collection(db, 'users'),
+          where('displayNameLower', '>=', input),
+          where('displayNameLower', '<', input + '\uf8ff')
+        )),
+        getDocs(query(collection(db, 'users'), where('email', '==', input))),
+      ]);
+
+      // Merge, dedupe by uid, exclude self
+      const seen = new Set<string>();
+      const candidates: FriendProfile[] = [];
+      for (const d of [...nameSnap.docs, ...emailSnap.docs]) {
+        if (seen.has(d.id) || d.id === myUid) { seen.add(d.id); continue; }
+        seen.add(d.id);
+        const data = d.data();
+        candidates.push({
+          uid: d.id,
+          displayName: data.displayName,
+          photoURL: data.photoURL,
+          xp: data.xp || 0,
+          xpMonth: 0,
+          xpMonthKey: '',
+          level: xpToLevel(data.xp || 0).level,
+          badges: data.badges || [],
+        });
       }
-      setSearchResult({ uid: foundUid, displayName: data.displayName, photoURL: data.photoURL, xp: data.xp || 0, xpMonth: 0, xpMonthKey: '', level: xpToLevel(data.xp || 0).level, badges: data.badges || [] });
+
+      if (candidates.length === 0) { setSearchError('No user found'); return; }
+      setSearchResults(candidates);
     } finally { setSearching(false); }
   }
 
@@ -178,10 +199,14 @@ export default function FriendsPage() {
       const myUid = user.uid;
       const id = friendshipId(myUid, toUid);
       const [a, b] = id.split('_');
+      const existing = await getDoc(doc(db, 'friendships', id));
+      if (existing.exists() && existing.data().status === 'accepted') {
+        setSearchError('Already friends!'); return;
+      }
       await setDoc(doc(db, 'friendships', id), {
         userA: a, userB: b, initiator: myUid, status: 'pending', createdAt: serverTimestamp(),
       });
-      setSearchResult(null); setSearchInput(''); setShowAdd(false);
+      setSearchResults([]); setSearchResult(null); setSearchInput(''); setShowAdd(false);
     } finally { setRequesting(false); }
   }
 
@@ -260,17 +285,28 @@ export default function FriendsPage() {
               </button>
             </div>
             {searchError && <p className="text-xs text-red-500 mt-2">{searchError}</p>}
-            {searchResult && (
-              <div className="flex items-center gap-3 mt-3 p-3 bg-gray-50 rounded-2xl">
-                <UserAvatar photoURL={searchResult.photoURL} displayName={searchResult.displayName} xp={searchResult.xp} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 truncate">{searchResult.displayName}</p>
-                  <p className="text-xs text-gray-400">Level {searchResult.level} · {searchResult.xp} XP</p>
-                </div>
-                <button onClick={() => sendRequest(searchResult!.uid)} disabled={requesting}
-                  className="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl active:scale-95 transition-transform disabled:opacity-50">
-                  {requesting ? '…' : 'Add'}
-                </button>
+            {searchResults.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {searchResults.map(r => {
+                  const alreadyFriend = friends.some(f => f.uid === r.uid);
+                  return (
+                    <div key={r.uid} className="flex items-center gap-3 p-3 bg-gray-50 rounded-2xl">
+                      <UserAvatar photoURL={r.photoURL} displayName={r.displayName} xp={r.xp} size="sm" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{r.displayName}</p>
+                        <p className="text-xs text-gray-400">Level {r.level} · {r.xp} XP</p>
+                      </div>
+                      {alreadyFriend ? (
+                        <span className="text-xs text-gray-400 font-medium">Friends ✓</span>
+                      ) : (
+                        <button onClick={() => sendRequest(r.uid)} disabled={requesting}
+                          className="px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl active:scale-95 transition-transform disabled:opacity-50">
+                          {requesting ? '…' : 'Add'}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
