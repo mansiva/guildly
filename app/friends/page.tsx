@@ -86,32 +86,34 @@ export default function FriendsPage() {
       });
     }
 
-    // Accepted friendships
+    // All friendships involving me — filter status client-side (avoids needing composite indexes)
     const [sentSnap, recvSnap] = await Promise.all([
-      getDocs(query(collection(db, 'friendships'), where('userA', '==', user.uid), where('status', '==', 'accepted'))),
-      getDocs(query(collection(db, 'friendships'), where('userB', '==', user.uid), where('status', '==', 'accepted'))),
+      getDocs(query(collection(db, 'friendships'), where('userA', '==', user.uid))),
+      getDocs(query(collection(db, 'friendships'), where('userB', '==', user.uid))),
     ]);
+    type FsDoc = { id: string; userA: string; userB: string; status: string; createdAt?: { toDate?: () => Date } };
+    const allSent: FsDoc[] = sentSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc, 'id'>) }));
+    const allRecv: FsDoc[] = recvSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc, 'id'>) }));
+
     const friendUids = [
-      ...sentSnap.docs.map(d => d.data().userB as string),
-      ...recvSnap.docs.map(d => d.data().userA as string),
+      ...allSent.filter(d => d.status === 'accepted').map(d => d.userB as string),
+      ...allRecv.filter(d => d.status === 'accepted').map(d => d.userA as string),
     ];
 
-    // Pending incoming requests
-    const pendingSnap = await getDocs(
-      query(collection(db, 'friendships'), where('userB', '==', user.uid), where('status', '==', 'pending'))
+    // Pending incoming requests (userB == me, status pending)
+    const incoming: FriendRequest[] = await Promise.all(
+      allRecv.filter(d => d.status === 'pending').map(async d => {
+        const fromSnap = await getDoc(doc(db, 'users', d.userA as string));
+        const fromData = fromSnap.data();
+        return {
+          id: d.id,
+          fromUid: d.userA as string,
+          fromName: fromData?.displayName || 'Someone',
+          fromPhoto: fromData?.photoURL,
+          createdAt: (d.createdAt as { toDate?: () => Date })?.toDate?.() || new Date(),
+        };
+      })
     );
-    const incoming: FriendRequest[] = await Promise.all(pendingSnap.docs.map(async d => {
-      const data = d.data();
-      const fromSnap = await getDoc(doc(db, 'users', data.userA));
-      const fromData = fromSnap.data();
-      return {
-        id: d.id,
-        fromUid: data.userA,
-        fromName: fromData?.displayName || 'Someone',
-        fromPhoto: fromData?.photoURL,
-        createdAt: data.createdAt?.toDate?.() || new Date(),
-      };
-    }));
     setPendingIn(incoming);
 
     // Load friend profiles
