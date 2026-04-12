@@ -49,7 +49,6 @@ export default function FriendsPage() {
   const [pendingIn, setPendingIn] = useState<FriendRequest[]>([]);
   const [myProfile, setMyProfile] = useState<FriendProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   const [showAdd, setShowAdd] = useState(false);
   const [managingFriend, setManagingFriend] = useState<FriendProfile | null>(null);
@@ -64,22 +63,17 @@ export default function FriendsPage() {
   useEffect(() => {
     if (!user?.uid) return;
     const myUid = user.uid;
-    const logs: string[] = [];
-    function addLog(msg: string) { logs.push(msg); setDebugLog([...logs]); }
 
     async function load() {
       setLoading(true);
-      addLog(`loading for ${myUid}`);
       try {
         // My groups
         const myGroupsSnap = await getDocs(query(collection(db, 'groupMembers'), where('userId', '==', myUid)));
         const gids = myGroupsSnap.docs.map(d => d.data().groupId as string);
-        addLog(`groups: ${gids.length}`);
 
         // My profile
         const mySnap = await getDoc(doc(db, 'users', myUid));
         const myData = mySnap.data();
-        addLog(`myData: ${myData ? myData.displayName : 'null'}`);
         if (myData) {
           setMyProfile({
             uid: myUid,
@@ -98,7 +92,6 @@ export default function FriendsPage() {
           getDocs(query(collection(db, 'friendships'), where('userA', '==', myUid))),
           getDocs(query(collection(db, 'friendships'), where('userB', '==', myUid))),
         ]);
-        addLog(`sent: ${sentSnap.size}, recv: ${recvSnap.size}`);
 
         type FsDoc = { id: string; userA: string; userB: string; status: string; createdAt?: unknown };
         const sent: FsDoc[] = sentSnap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<FsDoc,'id'>) }));
@@ -108,7 +101,6 @@ export default function FriendsPage() {
           ...sent.filter(d => d.status === 'accepted').map(d => d.userB),
           ...recv.filter(d => d.status === 'accepted').map(d => d.userA),
         ];
-        addLog(`friendUids: ${friendUids.length}`);
 
         // Pending incoming
         const incoming: FriendRequest[] = await Promise.all(
@@ -147,10 +139,8 @@ export default function FriendsPage() {
           } as FriendProfile;
         }));
         const filtered = loaded.filter((p): p is FriendProfile => p !== null);
-        addLog(`profiles loaded: ${filtered.length}`);
         setFriends(filtered);
       } catch (e: unknown) {
-        addLog(`ERROR: ${e instanceof Error ? e.message : String(e)}`);
       } finally {
         setLoading(false);
       }
@@ -253,13 +243,6 @@ export default function FriendsPage() {
             </button>
           </div>
         </div>
-
-        {/* Debug panel */}
-        {debugLog.length > 0 && (
-          <div className="mb-4 bg-gray-900 rounded-2xl p-3 text-xs font-mono text-green-400 space-y-0.5">
-            {debugLog.map((l, i) => <div key={i}>{l}</div>)}
-          </div>
-        )}
 
         {/* Add friend panel */}
         {showAdd && (
