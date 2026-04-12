@@ -158,15 +158,22 @@ export default function FriendsPage() {
     try {
       const input = searchInput.trim().toLowerCase();
 
-      // Fetch all users and filter client-side (small user base, avoids index issues)
-      const allUsersSnap = await getDocs(collection(db, 'users'));
+      // Prefix search on displayNameLower + exact email fallback
+      let nameSnap = await getDocs(query(collection(db, 'users'),
+        where('displayNameLower', '>=', input),
+        where('displayNameLower', '<=', input + '\uf8ff'),
+      ));
+      // Also try exact email
+      let emailSnap = await getDocs(query(collection(db, 'users'),
+        where('email', '==', input),
+      ));
+
+      const seen = new Set<string>();
       const candidates: FriendProfile[] = [];
-      for (const d of allUsersSnap.docs) {
-        if (d.id === myUid) continue;
+      for (const d of [...nameSnap.docs, ...emailSnap.docs]) {
+        if (seen.has(d.id) || d.id === myUid) { seen.add(d.id); continue; }
+        seen.add(d.id);
         const data = d.data();
-        const nameLower: string = data.displayNameLower || data.displayName?.toLowerCase() || '';
-        const emailLower: string = (data.email || '').toLowerCase();
-        if (!nameLower.includes(input) && !emailLower.includes(input)) continue;
         candidates.push({
           uid: d.id,
           displayName: data.displayName,
