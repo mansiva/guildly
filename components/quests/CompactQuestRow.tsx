@@ -33,6 +33,12 @@ const DIFFICULTY_DOT: Record<string, string> = {
   hard:   'bg-red-400',
 };
 
+export interface QuestMember {
+  uid: string;
+  displayName: string;
+  photoURL?: string;
+}
+
 interface Props {
   quest: Quest;
   userId: string;
@@ -41,9 +47,11 @@ interface Props {
   onEdit?: (q: Quest) => void;
   /** Optional group emoji shown when listing quests across multiple groups */
   groupLabel?: string;
+  /** Member profiles for the expanded contributor list */
+  members?: QuestMember[];
 }
 
-export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupLabel }: Props) {
+export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupLabel, members = [] }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showLog, setShowLog] = useState(false);
 
@@ -110,45 +118,75 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
         </button>
 
         {expanded && (
-          <div className="px-4 pb-4 border-t border-gray-50">
-            {/* Expanded progress bar with legend */}
-            <div className="mt-3 mb-2">
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex mb-1.5">
-                <div className="h-full bg-green-400 transition-all" style={{ width: `${myPct}%` }} />
-                <div className="h-full bg-indigo-400 transition-all" style={{ width: `${otherPct}%` }} />
-              </div>
-              <div className="flex items-center gap-3 text-xs text-gray-500">
-                <span className="flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-                  You {myPct}%
-                </span>
-                {otherPct > 0 && (
-                  <span className="flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-full bg-indigo-400" />
-                    Others {otherPct}%
-                  </span>
+          <div className="px-4 pb-3 border-t border-gray-50">
+            {/* Description + meta row */}
+            <div className="flex items-center gap-2 mt-2 mb-3">
+              <div className="flex-1 min-w-0">
+                {quest.description && (
+                  <p className="text-xs text-gray-400 truncate">{quest.description}</p>
                 )}
-                <span className="ml-auto text-indigo-600 font-bold">+{quest.xpReward} XP</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  {quest.difficulty && (
+                    <span className="text-xs text-gray-400">{DIFFICULTY_LABELS[quest.difficulty]}</span>
+                  )}
+                  <span className="text-xs text-indigo-600 font-bold">+{quest.xpReward} XP</span>
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-2 mt-1">
-              {quest.difficulty && (
-                <span className="text-xs text-gray-400">{DIFFICULTY_LABELS[quest.difficulty]}</span>
-              )}
-              {quest.description && (
-                <p className="text-xs text-gray-500 flex-1 truncate">{quest.description}</p>
-              )}
-              {/* Pencil only rendered when onEdit is passed (admin/owner callers only) */}
               {onEdit && (
                 <button
                   onClick={() => onEdit(quest)}
-                  className="ml-auto p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 active:scale-95 transition-all shrink-0"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 active:scale-95 transition-all shrink-0"
                 >
                   <Pencil size={14} />
                 </button>
               )}
             </div>
+
+            {/* Contributor leaderboard */}
+            {(() => {
+              // Build sorted list of everyone who contributed
+              const contribs = Object.entries(quest.contributions || {})
+                .map(([uid, amount]) => {
+                  const member = members.find(m => m.uid === uid);
+                  const isMe = uid === userId;
+                  const pct = Math.min(100, Math.round(((amount as number) / total) * 100));
+                  return { uid, amount: amount as number, pct, isMe, displayName: member?.displayName || (isMe ? 'You' : 'Unknown') };
+                })
+                .filter(c => c.amount > 0)
+                .sort((a, b) => b.amount - a.amount);
+
+              if (contribs.length === 0) return (
+                <p className="text-xs text-gray-400 text-center py-1">No contributions yet — be first!</p>
+              );
+
+              return (
+                <div className="space-y-2">
+                  {contribs.map((c, i) => (
+                    <div key={c.uid} className="flex items-center gap-2">
+                      {/* Rank */}
+                      <span className="text-xs font-bold text-gray-300 w-4 shrink-0 text-center">
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`}
+                      </span>
+                      {/* Name */}
+                      <span className={`text-xs font-medium truncate flex-1 ${c.isMe ? 'text-indigo-600' : 'text-gray-700'}`}>
+                        {c.isMe ? 'You' : c.displayName}
+                      </span>
+                      {/* Mini bar */}
+                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden shrink-0">
+                        <div
+                          className={`h-full rounded-full transition-all ${c.isMe ? 'bg-green-400' : 'bg-indigo-300'}`}
+                          style={{ width: `${c.pct}%` }}
+                        />
+                      </div>
+                      {/* Amount */}
+                      <span className="text-xs text-gray-400 shrink-0 w-16 text-right">
+                        {c.amount} {quest.unit} · {c.pct}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

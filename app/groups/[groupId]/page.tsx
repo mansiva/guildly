@@ -276,6 +276,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             <div className="space-y-2">
               {activeQuests.map(q => (
                 <CompactQuestRow key={q.id} quest={q} userId={user!.uid} groupId={groupId}
+                  members={memberProfiles}
                   onEdit={isAdmin ? (q) => { setEditingQuest(q); setShowQuestForm(true); } : undefined}
                 />
               ))}
@@ -289,7 +290,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             <h2 className="font-bold text-gray-900 mb-2">Completed ✓</h2>
             <div className="space-y-2">
               {completedQuests.slice(0, 3).map(q => (
-                <CompactQuestRow key={q.id} quest={q} userId={user!.uid} groupId={groupId} />
+                <CompactQuestRow key={q.id} quest={q} userId={user!.uid} groupId={groupId} members={memberProfiles} />
               ))}
             </div>
           </div>

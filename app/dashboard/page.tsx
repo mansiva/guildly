@@ -71,6 +71,8 @@ export default function DashboardPage() {
   const { feed } = useGroupFeed(primaryGroupId);
   const { members: memberDocs } = useGroupMembers(primaryGroupId);
   const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number }[]>([]);
+  // Members per group for quest contributor lists
+  const [membersByGroup, setMembersByGroup] = useState<Record<string, { uid: string; displayName: string; photoURL?: string }[]>>({});
 
   // Primary group for feed display
   useEffect(() => {
@@ -106,6 +108,26 @@ export default function DashboardPage() {
       return { uid: m.userId, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
     })).then(setMemberProfiles);
   }, [memberDocs]);
+
+  // Load members for all groups so quest contributor lists work across groups
+  useEffect(() => {
+    if (groupIds.length === 0) return;
+    Promise.all(groupIds.map(async gid => {
+      const { getDocs: gd, query: q2, collection: col, where: w } = await import('firebase/firestore');
+      const snap = await gd(q2(col(db, 'groupMembers'), w('groupId', '==', gid)));
+      const profiles = await Promise.all(snap.docs.map(async d => {
+        const uid = d.data().userId as string;
+        const usnap = await getDoc(firestoreDoc(db, 'users', uid));
+        const data = usnap.exists() ? usnap.data() : null;
+        return { uid, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL };
+      }));
+      return { gid, profiles };
+    })).then(results => {
+      const map: Record<string, { uid: string; displayName: string; photoURL?: string }[]> = {};
+      results.forEach(r => { map[r.gid] = r.profiles; });
+      setMembersByGroup(map);
+    });
+  }, [groupIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { level, progress, nextLevelXp } = xpToLevel(userData?.xp || 0);
   // Quests from primary group for feed lookup
@@ -189,6 +211,7 @@ export default function DashboardPage() {
                         userId={user!.uid}
                         groupId={groupId}
                         groupLabel={groups.length > 1 ? grp?.emoji : undefined}
+                        members={membersByGroup[groupId] || []}
                         onEdit={adminGroupIds.has(groupId) ? (q) => setEditingQuest({ quest: q, groupId }) : undefined}
                       />
                     );
