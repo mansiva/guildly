@@ -37,22 +37,24 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex flex-col justify-end">
-      {/* Backdrop tap to close */}
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end bg-black/50">
+      {/* Backdrop */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Sheet */}
-      <div className="relative bg-white rounded-t-3xl w-full px-5 pt-5 pb-sheet">
+      {/* Sheet — constrained to app width */}
+      <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 pb-sheet">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-bold text-lg text-gray-900">Log Progress</h2>
           <button onClick={onClose} className="p-2 rounded-full bg-gray-100">
             <X size={18} className="text-gray-500" />
           </button>
         </div>
+
         <p className="text-sm text-gray-700 font-semibold mb-0.5">{quest.title}</p>
         <p className="text-xs text-gray-400 mb-5">
           Progress: {quest.currentValue} / {quest.targetValue} {quest.unit}
         </p>
+
         <form onSubmit={handleSubmit}>
           <div className="flex items-center gap-3 mb-4">
             <input
@@ -62,10 +64,10 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
               placeholder="0"
               value={value}
               onChange={e => setValue(e.target.value)}
-              className="flex-1 px-4 py-4 bg-gray-50 rounded-2xl text-center text-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-300 text-gray-900"
+              className="min-w-0 flex-1 px-3 py-4 bg-gray-50 rounded-2xl text-center text-3xl font-bold outline-none focus:ring-2 focus:ring-indigo-300 text-gray-900"
               autoFocus
             />
-            <span className="text-gray-500 font-medium text-lg">{quest.unit}</span>
+            <span className="shrink-0 text-gray-500 font-medium text-base">{quest.unit}</span>
           </div>
           {error && <p className="text-red-500 text-xs text-center mb-3">{error}</p>}
           <button

@@ -394,9 +394,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
 
       {/* Quest form bottom sheet */}
       {showQuestForm && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end">
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-end">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowQuestForm(false)} />
-          <div className="relative bg-white rounded-t-3xl px-5 pt-5 pb-sheet max-h-[92vh] overflow-y-auto">
+          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 pb-sheet max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-gray-900">
                 {editingQuest ? 'Edit Quest' : 'New Quest'}
