@@ -89,11 +89,12 @@ export async function POST(req: NextRequest) {
     // Badge feed entries
     for (const badge of newContribBadges) {
       await adminDb.collection(`groups/${groupId}/feed`).add({
+        type: 'badge',
         groupId, questId: '', questTitle: '',
         userId, userName: userData.displayName || 'Someone',
         userPhoto: userData.photoURL || null,
         value: 0, unit: '',
-        nudge: `${badge.emoji} ${userData.displayName || 'Someone'} earned "${badge.name}" (Tier ${badge.tier}) badge! +${badge.xpReward} XP`,
+        nudge: `${badge.emoji} earned the ${badge.name} badge (Tier ${badge.tier})! +${badge.xpReward} XP`,
         createdAt: FieldValue.serverTimestamp(),
       });
     }
@@ -154,11 +155,12 @@ export async function POST(req: NextRequest) {
         // Badge feed entries for completion badges
         for (const badge of allNewBadges) {
           completionUpdates.push(adminDb.collection(`groups/${groupId}/feed`).add({
+            type: 'badge',
             groupId, questId: '', questTitle: '',
             userId: uid, userName: cUserData.displayName || 'Someone',
             userPhoto: cUserData.photoURL || null,
             value: 0, unit: '',
-            nudge: `${badge.emoji} ${cUserData.displayName || 'Someone'} earned "${badge.name}" (Tier ${badge.tier}) badge! +${badge.xpReward} XP`,
+            nudge: `${badge.emoji} earned the ${badge.name} badge (Tier ${badge.tier})! +${badge.xpReward} XP`,
             createdAt: FieldValue.serverTimestamp(),
           }));
         }

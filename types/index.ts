@@ -87,6 +87,7 @@ export interface Badge {
 
 export interface ActivityEntry {
   id: string;
+  type?: 'log' | 'badge' | 'completion';
   groupId: string;
   questId: string;
   questTitle: string;

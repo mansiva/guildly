@@ -43,6 +43,23 @@ export default function FeedItem({ entry, members, quests }: Props) {
     );
   }
 
+  // Badge earned entries
+  if (entry.type === 'badge') {
+    return (
+      <div className="flex items-start gap-3 py-3">
+        <UserAvatar photoURL={photoURL} displayName={displayName} xp={xp} size="sm" showLevel={false} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline gap-1 flex-wrap">
+            <span className="font-semibold text-sm text-gray-900">{displayName}</span>
+            <span className="text-sm text-gray-500">got a badge —</span>
+            <span className="text-sm text-indigo-600 font-medium">{entry.nudge}</span>
+          </div>
+          <span className="text-xs text-gray-400">{formatRelativeTime(time)}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-start gap-3 py-3">
       <UserAvatar
