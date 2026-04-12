@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Quest } from '@/types';
-import { Plus, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import LogProgressModal from './LogProgressModal';
 import { DIFFICULTY_LABELS } from '@/lib/questXp';
 
@@ -29,13 +29,21 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
   const [expanded, setExpanded] = useState(false);
   const [showLog, setShowLog] = useState(false);
 
-  const pct = Math.min(100, Math.round((quest.currentValue / quest.targetValue) * 100));
+  const total = quest.targetValue || 1;
+  const current = quest.currentValue || 0;
+  const myContrib = quest.contributions?.[userId] || 0;
+
+  // Percentages capped at 100
+  const myPct = Math.min(100, Math.round((myContrib / total) * 100));
+  const otherPct = Math.min(100 - myPct, Math.round(((current - myContrib) / total) * 100));
+
   const deadlineDate = toDate(quest.deadline);
   const daysLeft = deadlineDate
     ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / 86400000))
     : null;
   const completed = quest.status === 'completed';
   const urgent = !completed && daysLeft !== null && daysLeft <= 1;
+  const totalPct = Math.min(100, Math.round((current / total) * 100));
 
   return (
     <>
@@ -49,10 +57,12 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
               {groupLabel && <span className="text-xs text-gray-400 shrink-0">{groupLabel}</span>}
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+              {/* Dual-colour progress bar (collapsed) */}
+              <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
+                <div className="h-full bg-green-400 transition-all" style={{ width: `${myPct}%` }} />
+                <div className="h-full bg-indigo-400 transition-all" style={{ width: `${otherPct}%` }} />
               </div>
-              <span className="text-xs text-gray-400 shrink-0">{pct}%</span>
+              <span className="text-xs text-gray-400 shrink-0">{totalPct}%</span>
               {daysLeft !== null && !completed && (
                 <span className={`text-xs shrink-0 ${urgent ? 'text-orange-500 font-semibold' : 'text-gray-400'}`}>
                   {daysLeft === 0 ? 'Due today' : `${daysLeft}d left`}
@@ -75,23 +85,44 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
 
         {expanded && (
           <div className="px-4 pb-4 border-t border-gray-50">
-            <div className="flex items-center justify-between mt-3 mb-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-indigo-600 font-bold">+{quest.xpReward} XP</span>
-                {quest.difficulty && (
-                  <span className="text-xs text-gray-400">{DIFFICULTY_LABELS[quest.difficulty]}</span>
-                )}
+            {/* Dual-colour bar with legend */}
+            <div className="mt-3 mb-2">
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden flex mb-1.5">
+                <div className="h-full bg-green-400 transition-all" style={{ width: `${myPct}%` }} />
+                <div className="h-full bg-indigo-400 transition-all" style={{ width: `${otherPct}%` }} />
               </div>
-              <span className="text-xs text-gray-500">
-                My contribution: {quest.contributions?.[userId] || 0} {quest.unit}
-              </span>
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
+                  You {myPct}%
+                </span>
+                {otherPct > 0 && (
+                  <span className="flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-full bg-indigo-400" />
+                    Others {otherPct}%
+                  </span>
+                )}
+                <span className="ml-auto text-indigo-600 font-bold">+{quest.xpReward} XP</span>
+              </div>
             </div>
-            {quest.description && <p className="text-xs text-gray-500 mt-1">{quest.description}</p>}
-            {onEdit && (
-              <button onClick={() => onEdit(quest)} className="mt-2 text-xs text-indigo-500 font-medium">
-                Edit quest
-              </button>
-            )}
+
+            <div className="flex items-center justify-between mt-1">
+              {quest.difficulty && (
+                <span className="text-xs text-gray-400">{DIFFICULTY_LABELS[quest.difficulty]}</span>
+              )}
+              {quest.description && (
+                <p className="text-xs text-gray-500 flex-1 mx-2 truncate">{quest.description}</p>
+              )}
+              {/* Edit icon — always shown */}
+              {onEdit && (
+                <button
+                  onClick={() => onEdit(quest)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 active:scale-95 transition-all"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

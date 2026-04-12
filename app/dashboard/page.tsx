@@ -14,6 +14,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
 import { Group, Quest } from '@/types';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -56,6 +57,7 @@ function useAllGroupsQuests(groupIds: string[]) {
 // For the feed we just use the first group
 export default function DashboardPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const [primaryGroupId, setPrimaryGroupId] = useState<string | null>(null);
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
@@ -173,6 +175,7 @@ export default function DashboardPage() {
                         userId={user!.uid}
                         groupId={groupId}
                         groupLabel={groups.length > 1 ? grp?.emoji : undefined}
+                        onEdit={() => router.push(`/groups/${groupId}`)}
                       />
                     );
                   })}
