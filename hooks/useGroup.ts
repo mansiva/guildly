@@ -88,6 +88,33 @@ export function useGroupQuests(groupId: string | null) {
   return { quests, loading };
 }
 
+/** Fetches member count + active quest count for a list of group IDs */
+export function useGroupStats(groupIds: string[]) {
+  const [stats, setStats] = useState<Record<string, { memberCount: number; activeQuestCount: number }>>({});
+
+  useEffect(() => {
+    if (groupIds.length === 0) return;
+    const key = groupIds.join(',');
+    Promise.all(groupIds.map(async id => {
+      const [membersSnap, questsSnap] = await Promise.all([
+        import('firebase/firestore').then(({ getDocs, query, collection, where }) =>
+          getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', id)))
+        ),
+        import('firebase/firestore').then(({ getDocs, query, collection, where }) =>
+          getDocs(query(collection(db, 'groups', id, 'quests'), where('status', '==', 'active')))
+        ),
+      ]);
+      return { id, memberCount: membersSnap.size, activeQuestCount: questsSnap.size };
+    })).then(results => {
+      const map: Record<string, { memberCount: number; activeQuestCount: number }> = {};
+      results.forEach(r => { map[r.id] = { memberCount: r.memberCount, activeQuestCount: r.activeQuestCount }; });
+      setStats(map);
+    });
+  }, [groupIds.join(',')]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  return stats;
+}
+
 export function useGroupFeed(groupId: string | null) {
   const [feed, setFeed] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);

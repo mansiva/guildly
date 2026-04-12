@@ -5,33 +5,71 @@ import { useAuth } from '@/context/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
-import { useUserGroups, useGroupQuests, useGroupFeed, useGroupMembers } from '@/hooks/useGroup';
-import QuestCard from '@/components/quests/QuestCard';
+import { useUserGroups, useGroupQuests, useGroupFeed, useGroupMembers, useGroupStats } from '@/hooks/useGroup';
+import CompactQuestRow from '@/components/quests/CompactQuestRow';
+import GroupCard from '@/components/groups/GroupCard';
 import FeedItem from '@/components/feed/FeedItem';
 import ProgressBar from '@/components/ui/ProgressBar';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
-import { Group } from '@/types';
+import { Group, Quest } from '@/types';
 import Link from 'next/link';
 
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === 'object' && value !== null && 'toDate' in value) {
+    return (value as { toDate: () => Date }).toDate();
+  }
+  const d = new Date(value as string | number);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Hook to load quests for multiple groups at once
+function useAllGroupsQuests(groupIds: string[]) {
+  const g0 = useGroupQuests(groupIds[0] ?? null);
+  const g1 = useGroupQuests(groupIds[1] ?? null);
+  const g2 = useGroupQuests(groupIds[2] ?? null);
+  const g3 = useGroupQuests(groupIds[3] ?? null);
+  const g4 = useGroupQuests(groupIds[4] ?? null);
+
+  const all: { quest: Quest; groupId: string }[] = [];
+  [g0, g1, g2, g3, g4].forEach((g, i) => {
+    const gid = groupIds[i];
+    if (!gid) return;
+    g.quests.filter(q => q.status === 'active').forEach(q => all.push({ quest: q, groupId: gid }));
+  });
+
+  // Sort by deadline ascending (soonest first), nulls last
+  all.sort((a, b) => {
+    const da = toDate(a.quest.deadline);
+    const db_ = toDate(b.quest.deadline);
+    if (!da && !db_) return 0;
+    if (!da) return 1;
+    if (!db_) return -1;
+    return da.getTime() - db_.getTime();
+  });
+
+  return all;
+}
+
+// For the feed we just use the first group
 export default function DashboardPage() {
   const { user } = useAuth();
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [primaryGroupId, setPrimaryGroupId] = useState<string | null>(null);
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
   const { groups } = useUserGroups(user?.uid || null);
-  const { quests } = useGroupQuests(activeGroupId);
-  const { feed } = useGroupFeed(activeGroupId);
-  const { members: memberDocs } = useGroupMembers(activeGroupId);
+  const groupIds = groups.map(g => g.id);
+  const groupStats = useGroupStats(groupIds);
+  const allActiveQuests = useAllGroupsQuests(groupIds);
+  const { feed } = useGroupFeed(primaryGroupId);
+  const { members: memberDocs } = useGroupMembers(primaryGroupId);
   const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number }[]>([]);
 
-  const activeQuests = quests.filter(q => q.status === 'active');
-
-  // Set default active group once groups load
+  // Primary group for feed display
   useEffect(() => {
-    if (groups.length > 0 && !activeGroupId) {
-      setActiveGroupId(groups[0].id);
-    }
+    if (groups.length > 0 && !primaryGroupId) setPrimaryGroupId(groups[0].id);
   }, [groups]);
 
   useEffect(() => {
@@ -54,10 +92,12 @@ export default function DashboardPage() {
   }, [memberDocs]);
 
   const { level, progress, nextLevelXp } = xpToLevel(userData?.xp || 0);
+  // Quests from primary group for feed lookup
+  const primaryGroup = groups[0];
 
   return (
     <AppShell>
-      <div className="px-4 pt-6">
+      <div className="px-4 pt-6 pb-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <UserAvatar
@@ -93,61 +133,69 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            {/* Group selector */}
-            {groups.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-hide">
+            {/* My Groups */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bold text-gray-900">My Groups</h2>
+                <Link href="/groups" className="text-sm text-indigo-600 font-medium">See all</Link>
+              </div>
+              <div className="space-y-3">
                 {groups.map((g: Group) => (
-                  <button
+                  <GroupCard
                     key={g.id}
-                    onClick={() => setActiveGroupId(g.id)}
-                    className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                      activeGroupId === g.id ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200'
-                    }`}
-                  >
-                    {g.emoji} {g.name}
-                  </button>
+                    group={g}
+                    memberCount={groupStats[g.id]?.memberCount ?? 0}
+                    activeQuestCount={groupStats[g.id]?.activeQuestCount ?? 0}
+                  />
                 ))}
               </div>
-            )}
+            </div>
 
-            {/* Active quests */}
+            {/* Active quests — all groups, sorted by time left */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-bold text-gray-900">Active Quests</h2>
                 <Link href="/quests" className="text-sm text-indigo-600 font-medium">See all</Link>
               </div>
-              {activeQuests.length === 0 ? (
-                <div className="bg-white rounded-3xl p-6 text-center border border-dashed border-gray-200">
+              {allActiveQuests.length === 0 ? (
+                <div className="bg-white rounded-2xl p-6 text-center border border-dashed border-gray-200">
                   <p className="text-gray-400 text-sm">No active quests</p>
                   <Link href="/quests" className="text-indigo-600 text-sm font-medium mt-1 inline-block">+ Add quest</Link>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {activeQuests.slice(0, 3).map(q => (
-                    <QuestCard key={q.id} quest={q} userId={user!.uid} groupId={activeGroupId!} />
-                  ))}
+                <div className="space-y-2">
+                  {allActiveQuests.map(({ quest, groupId }) => {
+                    const grp = groups.find(g => g.id === groupId);
+                    return (
+                      <CompactQuestRow
+                        key={`${groupId}-${quest.id}`}
+                        quest={quest}
+                        userId={user!.uid}
+                        groupId={groupId}
+                        groupLabel={groups.length > 1 ? grp?.emoji : undefined}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
 
-            {/* Feed */}
-            <div className="mb-4">
-              <h2 className="font-bold text-gray-900 mb-3">Group Activity</h2>
-              {feed.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-4">No activity yet — be the first to log!</p>
-              ) : (
+            {/* Feed — from primary group */}
+            {feed.length > 0 && (
+              <div className="mb-4">
+                <h2 className="font-bold text-gray-900 mb-3">Recent Activity</h2>
                 <div className="bg-white rounded-3xl px-4 divide-y divide-gray-100 border border-gray-100">
-                  {feed.slice(0, 10).map(entry => (
+                  {feed.slice(0, 8).map(entry => (
                     <FeedItem
                       key={entry.id}
                       entry={entry}
                       members={memberProfiles}
-                      quests={quests.map(q => ({ id: q.id, title: q.title }))}
+                      quests={allActiveQuests.filter(a => a.groupId === primaryGroupId).map(a => ({ id: a.quest.id, title: a.quest.title }))}
                     />
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </>
         )}
       </div>
