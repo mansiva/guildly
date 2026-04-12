@@ -19,7 +19,7 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const num = parseFloat(value);
-    if (isNaN(num) || num <= 0) { setError('Enter a valid number'); return; }
+    if (isNaN(num) || num <= 0) { setError('Must be greater than 0'); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/quests/log', {
@@ -59,7 +59,7 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
           <div className="mb-4">
             <input
               type="number"
-              min="0.1"
+              min="0.01"
               step="any"
               placeholder="0"
               value={value}
@@ -71,7 +71,7 @@ export default function LogProgressModal({ quest, userId, groupId, onClose }: Pr
           {error && <p className="text-red-500 text-xs text-center mb-3">{error}</p>}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !value || parseFloat(value) <= 0}
             className="w-full py-4 bg-indigo-600 text-white font-semibold rounded-2xl disabled:opacity-50 active:scale-95 transition-transform text-base"
           >
             {loading ? 'Saving...' : 'Add to Quest ⚡'}
