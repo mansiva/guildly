@@ -50,6 +50,7 @@ export default function FriendsPage() {
   const [loading, setLoading] = useState(true);
 
   const [showAdd, setShowAdd] = useState(false);
+  const [managingFriend, setManagingFriend] = useState<FriendProfile | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [searchResult, setSearchResult] = useState<FriendProfile | null>(null);
   const [searchError, setSearchError] = useState('');
@@ -191,6 +192,16 @@ export default function FriendsPage() {
     setPendingIn(prev => prev.filter(r => r.id !== id));
   }
 
+  async function removeFriend(uid: string) {
+    if (!user) return;
+    const id = friendshipId(user.uid, uid);
+    await import('firebase/firestore').then(({ updateDoc, doc: d }) =>
+      updateDoc(d(db, 'friendships', id), { status: 'removed' })
+    );
+    setFriends(prev => prev.filter(f => f.uid !== uid));
+    setManagingFriend(null);
+  }
+
   async function handleShareInvite() {
     if (!user) return;
     setSharing(true);
@@ -317,7 +328,8 @@ export default function FriendsPage() {
               const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : null;
               return (
                 <div key={p.uid}
-                  className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${isMe ? 'bg-indigo-50' : ''}`}>
+                  onClick={() => !isMe && setManagingFriend(p)}
+                  className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 ${isMe ? 'bg-indigo-50' : 'cursor-pointer active:bg-gray-50'}`}>
                   {/* Rank */}
                   <div className="w-7 text-center shrink-0">
                     {medal
@@ -362,6 +374,29 @@ export default function FriendsPage() {
           </div>
         )}
       </div>
+      {/* Remove friend action sheet */}
+      {managingFriend && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-end" onClick={() => setManagingFriend(null)}>
+          <div className="absolute inset-0 bg-black/30" />
+          <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl p-4 pb-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4 px-1">
+              <UserAvatar photoURL={managingFriend.photoURL} displayName={managingFriend.displayName} xp={managingFriend.xp} size="sm" />
+              <div>
+                <p className="font-semibold text-gray-900">{managingFriend.displayName}</p>
+                <p className="text-xs text-gray-400">Level {managingFriend.level} · {managingFriend.xp} XP</p>
+              </div>
+            </div>
+            <button onClick={() => removeFriend(managingFriend.uid)}
+              className="w-full py-3.5 text-red-500 font-semibold rounded-2xl border border-red-100 active:scale-95 transition-transform text-sm">
+              Remove Friend
+            </button>
+            <button onClick={() => setManagingFriend(null)}
+              className="w-full py-3.5 text-gray-500 font-medium rounded-2xl mt-2 text-sm">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }

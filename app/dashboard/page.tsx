@@ -163,12 +163,27 @@ export default function DashboardPage() {
     if (!user || !joinCode.trim()) return;
     setGroupFormSaving(true); setGroupFormError('');
     try {
-      const invSnap = await import('firebase/firestore').then(({ getDoc, doc: d }) => getDoc(d(db, 'invites', joinCode.trim().toUpperCase())));
+      const { getDoc: gd, doc: fd, getDocs: gds, collection: col, query: q, where: wh, setDoc: sd } = await import('firebase/firestore');
+      const invSnap = await gd(fd(db, 'invites', joinCode.trim().toUpperCase()));
       if (!invSnap.exists() || invSnap.data().used) { setGroupFormError('Invalid or used invite code'); setGroupFormSaving(false); return; }
       const invite = invSnap.data();
-      await setDoc(firestoreDoc(db, 'groupMembers', `${invite.groupId}_${user.uid}`), {
-        groupId: invite.groupId, userId: user.uid, role: 'member', joinedAt: serverTimestamp(),
+      const gid = invite.groupId;
+      await sd(firestoreDoc(db, 'groupMembers', `${gid}_${user.uid}`), {
+        groupId: gid, userId: user.uid, role: 'member', joinedAt: serverTimestamp(),
       });
+      // Auto-friend existing members
+      function fid(a: string, b: string) { return [a, b].sort().join('_'); }
+      const membersSnap = await gds(q(col(db, 'groupMembers'), wh('groupId', '==', gid)));
+      await Promise.all(membersSnap.docs.map(async d => {
+        const otherUid = d.data().userId as string;
+        if (otherUid === user.uid) return;
+        const fsId = fid(user.uid, otherUid);
+        const [a, b] = fsId.split('_');
+        const fsSnap = await gd(fd(db, 'friendships', fsId));
+        if (!fsSnap.exists() || fsSnap.data().status === 'removed') {
+          await sd(fd(db, 'friendships', fsId), { userA: a, userB: b, initiator: 'group', status: 'accepted', createdAt: serverTimestamp() }, { merge: true });
+        }
+      }));
       setShowJoinGroup(false); setJoinCode('');
     } catch (e: unknown) { setGroupFormError(e instanceof Error ? e.message : 'Failed'); }
     finally { setGroupFormSaving(false); }

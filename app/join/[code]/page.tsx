@@ -2,8 +2,10 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, serverTimestamp, getDocs, collection, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+
+function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 import { useAuth } from '@/context/AuthContext';
 import Image from 'next/image';
 
@@ -78,6 +80,27 @@ export default function JoinPage({ params }: { params: Promise<{ code: string }>
         role: 'member',
         joinedAt: serverTimestamp(),
       });
+
+      // Auto-friend all existing members (skip self, skip already-accepted, restore if removed)
+      const existingMembersSnap = await getDocs(
+        query(collection(db, 'groupMembers'), where('groupId', '==', invite.groupId))
+      );
+      await Promise.all(existingMembersSnap.docs.map(async d => {
+        const otherUid = d.data().userId as string;
+        if (otherUid === user!.uid) return;
+        const fsId = friendshipId(user!.uid, otherUid);
+        const [a, b] = fsId.split('_');
+        const fsSnap = await getDoc(doc(db, 'friendships', fsId));
+        if (!fsSnap.exists() || fsSnap.data().status === 'removed') {
+          await setDoc(doc(db, 'friendships', fsId), {
+            userA: a, userB: b,
+            initiator: 'group',
+            status: 'accepted',
+            createdAt: serverTimestamp(),
+          }, { merge: true });
+        }
+        // If pending or accepted, leave as-is
+      }));
 
       setState('joined');
       setTimeout(() => router.replace(`/groups/${invite.groupId}`), 1500);

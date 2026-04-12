@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -181,6 +181,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     setManagingMember(null);
   }
 
+  async function handleLeaveGroup() {
+    if (!user || !confirm('Leave this group? Your progress will be kept but you won\'t be able to see it anymore.')) return;
+    await deleteDoc(doc(db, 'groupMembers', `${groupId}_${user.uid}`));
+    router.replace('/dashboard');
+  }
+
   async function handleSaveQuest(data: ReturnType<typeof questFormToFirestore>) {
     if (editingQuest) {
       await updateDoc(doc(db, 'groups', groupId, 'quests', editingQuest.id), {
@@ -251,24 +257,31 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         </div>
 
         {/* Admin actions */}
-        {isAdmin && (
-          <div className="flex gap-2 mb-5">
-            <button onClick={handleInvite} disabled={sharing}
-              className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50">
-              {sharing ? '…' : <><UserPlus size={15} /><Share2 size={13} /> Invite</>}
-            </button>
-            <button onClick={() => { setEditingQuest(null); setShowQuestForm(true); }}
-              className="flex-1 py-3 border border-indigo-200 text-indigo-600 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1 active:scale-95 transition-transform">
-              + Quest
-            </button>
-            {isOwner && (
-              <button onClick={handleDelete} disabled={deleting}
-                className="py-3 px-4 border border-red-200 text-red-400 rounded-2xl text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50">
-                {deleting ? '…' : <Trash2 size={16} />}
+        <div className="flex gap-2 mb-5">
+          {isAdmin && (
+            <>
+              <button onClick={handleInvite} disabled={sharing}
+                className="flex-1 py-3 bg-indigo-600 text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-50">
+                {sharing ? '…' : <><UserPlus size={15} /><Share2 size={13} /> Invite</>}
               </button>
-            )}
-          </div>
-        )}
+              <button onClick={() => { setEditingQuest(null); setShowQuestForm(true); }}
+                className="flex-1 py-3 border border-indigo-200 text-indigo-600 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1 active:scale-95 transition-transform">
+                + Quest
+              </button>
+            </>
+          )}
+          {isOwner ? (
+            <button onClick={handleDelete} disabled={deleting}
+              className="py-3 px-4 border border-red-200 text-red-400 rounded-2xl text-sm font-semibold flex items-center justify-center active:scale-95 transition-transform disabled:opacity-50">
+              {deleting ? '…' : <Trash2 size={16} />}
+            </button>
+          ) : (
+            <button onClick={handleLeaveGroup}
+              className="py-3 px-4 border border-red-200 text-red-400 rounded-2xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-95 transition-transform">
+              <LogOut size={15} /> Leave
+            </button>
+          )}
+        </div>
 
         {/* Members */}
         <div className="mb-5">
