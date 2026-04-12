@@ -158,23 +158,15 @@ export default function FriendsPage() {
     try {
       const input = searchInput.trim().toLowerCase();
 
-      // Prefix match on displayNameLower (e.g. "ruby" matches "ruby astrid tovar cardenas")
-      // Also try exact email match
-      const [nameSnap, emailSnap] = await Promise.all([
-        getDocs(query(collection(db, 'users'),
-          where('displayNameLower', '>=', input),
-          where('displayNameLower', '<', input + '\uf8ff')
-        )),
-        getDocs(query(collection(db, 'users'), where('email', '==', input))),
-      ]);
-
-      // Merge, dedupe by uid, exclude self
-      const seen = new Set<string>();
+      // Fetch all users and filter client-side (small user base, avoids index issues)
+      const allUsersSnap = await getDocs(collection(db, 'users'));
       const candidates: FriendProfile[] = [];
-      for (const d of [...nameSnap.docs, ...emailSnap.docs]) {
-        if (seen.has(d.id) || d.id === myUid) { seen.add(d.id); continue; }
-        seen.add(d.id);
+      for (const d of allUsersSnap.docs) {
+        if (d.id === myUid) continue;
         const data = d.data();
+        const nameLower: string = data.displayNameLower || data.displayName?.toLowerCase() || '';
+        const emailLower: string = (data.email || '').toLowerCase();
+        if (!nameLower.includes(input) && !emailLower.includes(input)) continue;
         candidates.push({
           uid: d.id,
           displayName: data.displayName,
