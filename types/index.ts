@@ -8,6 +8,10 @@ export interface User {
   xp: number;
   level: number;
   badges: Badge[];
+  logsCount: number;
+  questsCompleted: number;
+  questsLed: number;
+  nudgesGiven: number;
   createdAt: Date;
 }
 
@@ -47,6 +51,8 @@ export interface Quest {
   title: string;
   description: string;
   category: QuestCategory;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  duration?: 'daily' | 'weekly' | 'monthly' | 'custom';
   targetValue: number;
   unit: string;
   currentValue: number;
@@ -54,6 +60,8 @@ export interface Quest {
   createdAt: Date;
   createdBy: string;
   contributions: Record<string, number>; // userId -> value
+  xpDeferred: Record<string, number>;    // userId -> deferred XP not yet paid
+  topContributor?: string;               // userId of top contributor on completion
   status: 'active' | 'completed' | 'failed';
   xpReward: number;
 }
