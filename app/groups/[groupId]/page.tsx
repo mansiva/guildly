@@ -68,24 +68,26 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   }, [groupId, user]);
 
   useEffect(() => {
-    if (memberDocs.length === 0) return;
+    if (memberDocs.length === 0 || !user?.uid) return;
+    const myUid = user.uid;
     setLoadingMembers(true);
-    Promise.all(memberDocs.map(async m => {
-      const snap = await getDoc(doc(db, 'users', m.userId));
-      const data = snap.exists() ? snap.data() : null;
-      return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
-    })).then(async loaded => {
+    async function load() {
+      const loaded = await Promise.all(memberDocs.map(async m => {
+        const snap = await getDoc(doc(db, 'users', m.userId));
+        const data = snap.exists() ? snap.data() : null;
+        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
+      }));
       setMemberProfiles(loaded);
       setLoadingMembers(false);
-      if (!user) return;
       const statuses: Record<string, 'none' | 'pending' | 'accepted'> = {};
-      await Promise.all(loaded.filter(m => m.uid !== user.uid).map(async m => {
-        const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(user.uid, m.uid)));
+      await Promise.all(loaded.filter(m => m.uid !== myUid).map(async m => {
+        const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(myUid, m.uid)));
         statuses[m.uid] = fsSnap.exists() ? fsSnap.data().status as 'pending' | 'accepted' : 'none';
       }));
       setFriendStatuses(statuses);
-    });
-  }, [memberDocs]);
+    }
+    load().catch(console.error);
+  }, [memberDocs, user?.uid]);
 
   if (!group) return (
     <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
