@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, UserCheck, Clock } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -316,8 +316,16 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                         <div className="text-xs font-bold text-indigo-600">{m.xp} XP</div>
                         {m.uid !== user?.uid && (() => {
                           const fs = friendStatuses[m.uid];
-                          if (fs === 'accepted') return <span className="text-xs text-green-500 font-medium">Friends</span>;
-                          if (fs === 'pending') return <span className="text-xs text-gray-400">Pending</span>;
+                          if (fs === 'accepted') return (
+                            <span className="p-1.5 rounded-lg bg-green-50 text-green-500 flex items-center">
+                              <UserCheck size={13} />
+                            </span>
+                          );
+                          if (fs === 'pending') return (
+                            <span className="p-1.5 rounded-lg bg-gray-50 text-gray-400 flex items-center">
+                              <Clock size={13} />
+                            </span>
+                          );
                           return (
                             <button onClick={e => { e.stopPropagation(); sendFriendRequest(m.uid); }}
                               className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 active:scale-95 transition-transform">
