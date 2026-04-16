@@ -191,6 +191,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
 
   async function handleSaveQuest(data: ReturnType<typeof questFormToFirestore>) {
     if (editingQuest) {
+      const hasContributions = Object.keys(editingQuest.contributions ?? {}).length > 0;
+      if (hasContributions) {
+        alert('This quest already has contributions and cannot be edited.');
+        return;
+      }
       await updateDoc(doc(db, 'groups', groupId, 'quests', editingQuest.id), {
         title: data.title, description: data.description,
         targetValue: data.targetValue, unit: data.unit,

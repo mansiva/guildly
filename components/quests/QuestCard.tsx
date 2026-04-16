@@ -57,7 +57,7 @@ export default function QuestCard({ quest, userId, groupId, onEdit }: QuestCardP
             {!completed && daysLeft !== null && (
               <div className="text-xs text-gray-400">{daysLeft}d left</div>
             )}
-            {onEdit && (
+            {onEdit && Object.keys(quest.contributions ?? {}).length === 0 && (
               <button
                 onClick={() => onEdit(quest)}
                 className="text-xs text-indigo-400 font-medium underline-offset-2 hover:text-indigo-600"
