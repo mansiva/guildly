@@ -77,12 +77,9 @@ export async function POST(req: NextRequest) {
 
     // ── Add feed entry ─────────────────────────────────────────────────────
     await adminDb.collection(`groups/${groupId}/feed`).add({
-      groupId, questId,
-      questTitle: quest.title,
+      questId,
       userId,
-      userName: userData.displayName || 'Someone',
-      userPhoto: userData.photoURL || null,
-      value, unit: quest.unit,
+      value,
       createdAt: FieldValue.serverTimestamp(),
       ...(nudgeText ? { nudge: nudgeText } : {}),
     });
@@ -91,10 +88,9 @@ export async function POST(req: NextRequest) {
     for (const badge of newContribBadges) {
       await adminDb.collection(`groups/${groupId}/feed`).add({
         type: 'badge',
-        groupId, questId: '', questTitle: '',
-        userId, userName: userData.displayName || 'Someone',
-        userPhoto: userData.photoURL || null,
-        value: 0, unit: '',
+        userId,
+        questId: '',
+        value: 0,
         nudge: `${badge.emoji} earned the ${badge.name} badge (Tier ${badge.tier})! +${badge.xpReward} XP`,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -162,10 +158,9 @@ export async function POST(req: NextRequest) {
         for (const badge of allNewBadges) {
           completionUpdates.push(adminDb.collection(`groups/${groupId}/feed`).add({
             type: 'badge',
-            groupId, questId: '', questTitle: '',
-            userId: uid, userName: cUserData.displayName || 'Someone',
-            userPhoto: cUserData.photoURL || null,
-            value: 0, unit: '',
+            userId: uid,
+            questId: '',
+            value: 0,
             nudge: `${badge.emoji} earned the ${badge.name} badge (Tier ${badge.tier})! +${badge.xpReward} XP`,
             createdAt: FieldValue.serverTimestamp(),
           }));
@@ -184,9 +179,10 @@ export async function POST(req: NextRequest) {
       const topUserName = topUserSnap.data()?.displayName || 'Someone';
 
       await adminDb.collection(`groups/${groupId}/feed`).add({
-        groupId, questId, questTitle: quest.title,
-        userId: 'system', userName: 'Guildly',
-        value: 0, unit: '',
+        type: 'completion',
+        userId: 'system',
+        questId,
+        value: 0,
         nudge: `🏆 Quest complete! "${quest.title}" — ${questXp} XP earned! ⭐ ${topUserName} led the way as top contributor!`,
         createdAt: FieldValue.serverTimestamp(),
       });

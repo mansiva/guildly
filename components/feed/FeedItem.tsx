@@ -12,6 +12,7 @@ interface MemberProfile {
 interface QuestRef {
   id: string;
   title: string;
+  unit?: string;
 }
 
 interface Props {
@@ -25,14 +26,13 @@ export default function FeedItem({ entry, members, quests }: Props) {
     ? entry.createdAt
     : new Date((entry.createdAt as { seconds: number }).seconds * 1000);
 
-  // Live lookup — fall back to stored snapshot if member/quest not in list
   const member = members?.find(m => m.uid === entry.userId);
   const quest = quests?.find(q => q.id === entry.questId);
 
-  const displayName = member?.displayName ?? entry.userName;
+  const displayName = member?.displayName ?? 'Someone';
   const photoURL = member?.photoURL;
   const xp = member?.xp;
-  const questTitle = quest?.title ?? entry.questTitle;
+  const questTitle = quest?.title ?? '—';
 
   // System messages (userId === 'system')
   if (entry.userId === 'system') {
@@ -73,7 +73,7 @@ export default function FeedItem({ entry, members, quests }: Props) {
         <div className="flex items-baseline gap-1 flex-wrap">
           <span className="font-semibold text-sm text-gray-900">{displayName}</span>
           <span className="text-sm text-gray-500">logged</span>
-          <span className="font-semibold text-sm text-indigo-600">{entry.value} {entry.unit}</span>
+          <span className="font-semibold text-sm text-indigo-600">{entry.value} {quest?.unit}</span>
           <span className="text-sm text-gray-500">on</span>
           <span className="font-semibold text-sm text-gray-700">{questTitle}</span>
         </div>

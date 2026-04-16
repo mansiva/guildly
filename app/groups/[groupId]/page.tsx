@@ -397,7 +397,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               {feed.slice(0, 20).map(e => (
                 <FeedItem key={e.id} entry={e}
                   members={memberProfiles}
-                  quests={quests.map(q => ({ id: q.id, title: q.title }))}
+                  quests={quests.map(q => ({ id: q.id, title: q.title, unit: q.unit }))}
                 />
               ))}
             </div>
