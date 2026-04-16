@@ -314,7 +314,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               <div className="divide-y divide-gray-50">
                 {memberProfiles.map(m => {
                   const activeXp = getMemberActiveXp(m.uid);
-                  const tappable = isOwner && m.role !== 'owner';
+                  const tappable = isAdmin && m.role !== 'owner' && m.uid !== user?.uid;
                   return (
                     <div
                       key={m.uid}
@@ -357,7 +357,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               </div>
             )}
           </div>
-          {isOwner && <p className="text-xs text-gray-400 text-center mt-1.5">Tap a member to manage their role</p>}
+          {isAdmin && <p className="text-xs text-gray-400 text-center mt-1.5">Tap a member to manage their role</p>}
         </div>
 
         {/* Active quests */}
@@ -443,7 +443,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             </div>
 
             <div className="space-y-2">
-              {managingMember.role === 'member' ? (
+              {isOwner && (managingMember.role === 'member' ? (
                 <button
                   onClick={() => handlePromote(managingMember.uid)}
                   className="w-full flex items-center gap-3 px-4 py-3.5 bg-indigo-50 text-indigo-700 rounded-2xl font-medium text-sm active:scale-[0.98] transition-transform"
@@ -461,7 +461,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                   Remove Admin
                   <span className="ml-auto text-xs text-gray-400">Revert to member</span>
                 </button>
-              )}
+              ))}
               <button
                 onClick={() => handleRemoveMember(managingMember.uid)}
                 className="w-full flex items-center gap-3 px-4 py-3.5 bg-red-50 text-red-600 rounded-2xl font-medium text-sm active:scale-[0.98] transition-transform"
