@@ -75,6 +75,11 @@ export async function POST(req: NextRequest) {
       ...(newBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...newBadgeObjs) } : {}),
     });
 
+    // Increment xpInGroup on the groupMembers doc
+    await adminDb.doc(`groupMembers/${groupId}_${userId}`).update({
+      xpInGroup: FieldValue.increment(immediateXp + badgeXp),
+    });
+
     // ── Add feed entry ─────────────────────────────────────────────────────
     await adminDb.collection(`groups/${groupId}/feed`).add({
       questId,
@@ -152,6 +157,9 @@ export async function POST(req: NextRequest) {
           ...cMonthReset,
           ...(uid === topUid ? { questsLed: FieldValue.increment(1) } : {}),
           ...(cBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...cBadgeObjs) } : {}),
+        }));
+        completionUpdates.push(adminDb.doc(`groupMembers/${groupId}_${uid}`).update({
+          xpInGroup: FieldValue.increment(totalPayout + cBadgeXp),
         }));
 
         // Badge feed entries for completion badges

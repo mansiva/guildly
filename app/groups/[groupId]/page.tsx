@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, UserCheck, Clock } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -57,7 +57,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 
   const [memberProfiles, setMemberProfiles] = useState<{
-    uid: string; displayName: string; photoURL?: string; xp: number; role: string;
+    uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string;
   }[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
@@ -76,7 +76,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const loaded = await Promise.all(memberDocs.map(async m => {
         const snap = await getDoc(doc(db, 'users', m.userId));
         const data = snap.exists() ? snap.data() : null;
-        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0 };
+        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0 };
       }));
       setMemberProfiles(loaded);
       setLoadingMembers(false);
@@ -114,8 +114,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const isOwner = userRole === 'owner';
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
-  function getMemberQuestXp(uid: string): number {
-    return quests.reduce((sum, q) => sum + (q.contributions?.[uid] || 0), 0);
+  function getMemberActiveXp(uid: string): number {
+    return quests
+      .filter(q => q.status === 'active')
+      .reduce((sum, q) => {
+        const contrib = q.contributions?.[uid] || 0;
+        const pct = Math.min(contrib / (q.targetValue || 1), 1);
+        return sum + Math.floor(pct * (q.xpReward || 0) * 0.5);
+      }, 0);
   }
 
   async function handleInvite() {
@@ -306,7 +312,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             ) : (
               <div className="divide-y divide-gray-50">
                 {memberProfiles.map(m => {
-                  const questContrib = getMemberQuestXp(m.uid);
+                  const activeXp = getMemberActiveXp(m.uid);
                   const tappable = isOwner && m.role !== 'owner';
                   return (
                     <div
@@ -320,19 +326,16 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                           <span className="text-sm font-medium text-gray-800 truncate">{m.displayName}</span>
                           {getRoleBadge(m.role)}
                         </div>
-                        {questContrib > 0 && (
-                          <p className="text-xs text-indigo-500 font-medium">{questContrib} contributions</p>
-                        )}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-indigo-500 font-medium">{activeXp} xp active</span>
+                          <span className="text-xs text-gray-300">·</span>
+                          <span className="text-xs text-gray-400">{m.xpInGroup} xp total</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-xs font-bold text-indigo-600">{m.xp} XP</div>
                         {m.uid !== user?.uid && (() => {
                           const fs = friendStatuses[m.uid];
-                          if (fs === 'accepted') return (
-                            <span className="p-1.5 rounded-lg bg-green-50 text-green-500 flex items-center">
-                              <UserCheck size={13} />
-                            </span>
-                          );
+                          if (fs === 'accepted') return null;
                           if (fs === 'pending') return (
                             <span className="p-1.5 rounded-lg bg-gray-50 text-gray-400 flex items-center">
                               <Clock size={13} />

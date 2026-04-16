@@ -32,6 +32,7 @@ export interface GroupMember {
   userId: string;
   role: 'owner' | 'admin' | 'member';
   joinedAt: any;
+  xpInGroup?: number;
 }
 
 export interface GroupInvite {
