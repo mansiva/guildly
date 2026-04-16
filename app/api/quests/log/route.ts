@@ -27,6 +27,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Quest is not active' }, { status: 400 });
     }
 
+    // Block removed members from contributing
+    const memberSnap = await adminDb.doc(`groupMembers/${groupId}_${userId}`).get();
+    if (!memberSnap.exists || memberSnap.data()?.status === 'removed') {
+      return NextResponse.json({ error: 'Not a member of this group' }, { status: 403 });
+    }
+
     // ── Progress tracking ──────────────────────────────────────────────────
     const prevValue = quest.currentValue || 0;
     const newValue = prevValue + value;

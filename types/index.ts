@@ -33,6 +33,7 @@ export interface GroupMember {
   role: 'owner' | 'admin' | 'member';
   joinedAt: any;
   xpInGroup?: number;
+  status?: 'active' | 'removed';
 }
 
 export interface GroupInvite {

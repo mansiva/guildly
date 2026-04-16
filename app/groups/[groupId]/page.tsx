@@ -73,7 +73,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     const myUid = user.uid;
     setLoadingMembers(true);
     async function load() {
-      const loaded = await Promise.all(memberDocs.map(async m => {
+      const activeDocs = memberDocs.filter(m => m.status !== 'removed');
+      const loaded = await Promise.all(activeDocs.map(async m => {
         const snap = await getDoc(doc(db, 'users', m.userId));
         const data = snap.exists() ? snap.data() : null;
         return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0 };
@@ -189,8 +190,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   }
 
   async function handleRemoveMember(uid: string) {
-    if (!confirm('Remove this member from the group?')) return;
-    await deleteDoc(doc(db, 'groupMembers', `${groupId}_${uid}`));
+    if (!confirm('Remove this member from the group? Their contributions to active quests are kept and they will still receive XP if a quest they contributed to completes.')) return;
+    await updateDoc(doc(db, 'groupMembers', `${groupId}_${uid}`), { status: 'removed' });
     setManagingMember(null);
   }
 
