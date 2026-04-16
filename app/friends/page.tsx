@@ -251,6 +251,10 @@ export default function FriendsPage() {
     tab === 'month' ? b.xpMonth - a.xpMonth : b.xp - a.xp
   );
 
+  if (!user) return (
+    <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
+  );
+
   return (
     <AppShell>
       <div className="px-4 pt-6 pb-4">

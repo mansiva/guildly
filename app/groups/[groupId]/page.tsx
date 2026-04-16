@@ -90,7 +90,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     load().catch(console.error);
   }, [memberDocs, user?.uid]);
 
-  if (!group) return (
+  if (!group || !user) return (
     <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
   );
 
