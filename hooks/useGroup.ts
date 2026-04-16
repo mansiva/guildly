@@ -21,6 +21,7 @@ export function useGroup(groupId: string | null, userId?: string | null) {
   const cacheKey = groupId ? `guildly_group_${groupId}` : null;
   const [group, setGroup] = useState<Group | null>(() => cacheKey ? readCache<Group | null>(cacheKey, null) : null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!groupId || !cacheKey || userId === null) { setLoading(false); return; }
@@ -31,11 +32,15 @@ export function useGroup(groupId: string | null, userId?: string | null) {
         writeCache(cacheKey, fresh);
       }
       setLoading(false);
+    }, (err) => {
+      console.error('useGroup error:', err.code);
+      setError(err.code);
+      setLoading(false);
     });
     return unsub;
   }, [groupId, userId]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { group, loading };
+  return { group, loading, error };
 }
 
 export function useGroupMembers(groupId: string | null, userId?: string | null) {

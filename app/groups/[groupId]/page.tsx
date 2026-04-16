@@ -41,7 +41,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const uid = authLoading ? null : (user?.uid ?? null);
-  const { group } = useGroup(groupId, uid);
+  const { group, error: groupError } = useGroup(groupId, uid);
   const { quests } = useGroupQuests(groupId, uid);
   const { feed } = useGroupFeed(groupId, uid);
   const { members: memberDocs } = useGroupMembers(groupId, uid);
@@ -89,6 +89,10 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     }
     load().catch(console.error);
   }, [memberDocs, user?.uid]);
+
+  useEffect(() => {
+    if (groupError) router.replace('/groups');
+  }, [groupError, router]);
 
   if (!group || !user) return (
     <AppShell><div className="flex items-center justify-center h-64"><div className="text-3xl animate-pulse">⚡</div></div></AppShell>
