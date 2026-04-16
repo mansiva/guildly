@@ -423,8 +423,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         <div className="fixed inset-0 z-50 flex flex-col items-center justify-end" onClick={() => setManagingMember(null)}>
           <div className="absolute inset-0 bg-black/40" />
           <div
-            className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-4 overflow-y-auto"
-            style={{ maxHeight: '85vh', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+            className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-4 overflow-y-auto pb-16"
             onClick={e => e.stopPropagation()}
           >
             {/* Handle */}
