@@ -81,9 +81,12 @@ export async function POST(req: NextRequest) {
       ...(newBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...newBadgeObjs) } : {}),
     });
 
-    // Increment xpInGroup on the groupMembers doc
+    // Increment xpInGroup (quest XP only, not badges) and group XP
     await adminDb.doc(`groupMembers/${groupId}_${userId}`).update({
-      xpInGroup: FieldValue.increment(immediateXp + badgeXp),
+      xpInGroup: FieldValue.increment(immediateXp),
+    });
+    await adminDb.doc(`groups/${groupId}`).update({
+      xp: FieldValue.increment(immediateXp),
     });
 
     // ── Add feed entry ─────────────────────────────────────────────────────
@@ -165,7 +168,7 @@ export async function POST(req: NextRequest) {
           ...(cBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...cBadgeObjs) } : {}),
         }));
         completionUpdates.push(adminDb.doc(`groupMembers/${groupId}_${uid}`).update({
-          xpInGroup: FieldValue.increment(totalPayout + cBadgeXp),
+          xpInGroup: FieldValue.increment(deferred), // only quest XP, not badges
         }));
 
         // Badge feed entries for completion badges
@@ -183,9 +186,13 @@ export async function POST(req: NextRequest) {
 
       await Promise.all(completionUpdates);
 
-      // Group XP
+      // Group XP: sum of all deferred payouts (mirrors what users received)
+      const totalDeferredGroup = Object.entries(contributions).reduce((sum, [, contributed]) => {
+        const pct = Math.min((contributed as number) / (finalQuest.targetValue || totalContributed), 1);
+        return sum + Math.floor(pct * questXp * 0.5);
+      }, 0);
       await adminDb.doc(`groups/${groupId}`).update({
-        xp: FieldValue.increment(questXp),
+        xp: FieldValue.increment(totalDeferredGroup),
       });
 
       // Top contributor feed callout
