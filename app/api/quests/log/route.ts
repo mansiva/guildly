@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
     const questXp = quest.xpReward || 100;
     const contributionPct = Math.min(value / quest.targetValue, 1);
     const immediateXp = Math.floor(contributionPct * questXp * 0.5);
-    const deferredXp = Math.floor(contributionPct * questXp * 0.5);
 
     // ── User doc read for badge checks ────────────────────────────────────
     const userRef = adminDb.doc(`users/${userId}`);
@@ -52,7 +51,6 @@ export async function POST(req: NextRequest) {
     await questRef.update({
       currentValue: newValue,
       [`contributions.${userId}`]: FieldValue.increment(value),
-      [`xpDeferred.${userId}`]: FieldValue.increment(deferredXp),
       ...(completed ? { status: 'completed' } : {}),
     });
 
@@ -108,7 +106,7 @@ export async function POST(req: NextRequest) {
       const finalSnap = await questRef.get();
       const finalQuest = finalSnap.data()!;
       const contributions = finalQuest.contributions as Record<string, number> || {};
-      const xpDeferred = finalQuest.xpDeferred as Record<string, number> || {};
+      const totalContributed = Object.values(contributions).reduce((s, v) => s + v, 0);
 
       // Find top contributor
       let topUid = '';
@@ -122,9 +120,11 @@ export async function POST(req: NextRequest) {
 
       // Pay out deferred XP to all contributors + top contributor bonus
       const completionUpdates: Promise<unknown>[] = [];
-      for (const [uid, deferred] of Object.entries(xpDeferred)) {
+      for (const [uid, contributed] of Object.entries(contributions)) {
+        const contribPct = Math.min(contributed / (finalQuest.targetValue || totalContributed), 1);
+        const deferred = Math.floor(contribPct * questXp * 0.5);
         const bonus = uid === topUid ? Math.floor(questXp * 0.10) : 0;
-        const totalPayout = (deferred || 0) + bonus;
+        const totalPayout = deferred + bonus;
         if (totalPayout <= 0) continue;
 
         const cUserRef = adminDb.doc(`users/${uid}`);
