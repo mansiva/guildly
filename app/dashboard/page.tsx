@@ -32,12 +32,12 @@ function toDate(value: unknown): Date | null {
 }
 
 // Hook to load quests for multiple groups at once
-function useAllGroupsQuests(groupIds: string[]) {
-  const g0 = useGroupQuests(groupIds[0] ?? null);
-  const g1 = useGroupQuests(groupIds[1] ?? null);
-  const g2 = useGroupQuests(groupIds[2] ?? null);
-  const g3 = useGroupQuests(groupIds[3] ?? null);
-  const g4 = useGroupQuests(groupIds[4] ?? null);
+function useAllGroupsQuests(groupIds: string[], userId: string | null) {
+  const g0 = useGroupQuests(groupIds[0] ?? null, userId);
+  const g1 = useGroupQuests(groupIds[1] ?? null, userId);
+  const g2 = useGroupQuests(groupIds[2] ?? null, userId);
+  const g3 = useGroupQuests(groupIds[3] ?? null, userId);
+  const g4 = useGroupQuests(groupIds[4] ?? null, userId);
 
   const all: { quest: Quest; groupId: string }[] = [];
   [g0, g1, g2, g3, g4].forEach((g, i) => {
@@ -61,7 +61,8 @@ function useAllGroupsQuests(groupIds: string[]) {
 
 // For the feed we just use the first group
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const uid = authLoading ? null : (user?.uid ?? null);
   const [primaryGroupId, setPrimaryGroupId] = useState<string | null>(null);
   const [editingQuest, setEditingQuest] = useState<{ quest: Quest; groupId: string } | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -74,14 +75,14 @@ export default function DashboardPage() {
   const [groupFormError, setGroupFormError] = useState('');
   const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
 
-  const { groups } = useUserGroups(user?.uid || null);
+  const { groups } = useUserGroups(uid);
   const groupIds = groups.map(g => g.id);
   // Track which groups the user is admin/owner of
   const [adminGroupIds, setAdminGroupIds] = useState<Set<string>>(new Set());
   const groupStats = useGroupStats(groupIds);
-  const allActiveQuests = useAllGroupsQuests(groupIds);
-  const { feed } = useGroupFeed(primaryGroupId);
-  const { members: memberDocs } = useGroupMembers(primaryGroupId);
+  const allActiveQuests = useAllGroupsQuests(groupIds, uid);
+  const { feed } = useGroupFeed(primaryGroupId, uid);
+  const { members: memberDocs } = useGroupMembers(primaryGroupId, uid);
   const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number }[]>([]);
   // Members per group for quest contributor lists
   const [membersByGroup, setMembersByGroup] = useState<Record<string, { uid: string; displayName: string; photoURL?: string }[]>>({});

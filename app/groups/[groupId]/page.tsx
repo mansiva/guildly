@@ -38,12 +38,13 @@ function toDate(value: unknown): Date | null {
 
 export default function GroupDetailPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { group } = useGroup(groupId);
-  const { quests } = useGroupQuests(groupId);
-  const { feed } = useGroupFeed(groupId);
-  const { members: memberDocs } = useGroupMembers(groupId);
+  const uid = authLoading ? null : (user?.uid ?? null);
+  const { group } = useGroup(groupId, uid);
+  const { quests } = useGroupQuests(groupId, uid);
+  const { feed } = useGroupFeed(groupId, uid);
+  const { members: memberDocs } = useGroupMembers(groupId, uid);
 
   const [sharing, setSharing] = useState(false);
   const [deleting, setDeleting] = useState(false);
