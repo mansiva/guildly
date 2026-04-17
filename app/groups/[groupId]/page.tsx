@@ -384,20 +384,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {m.uid !== user?.uid && (
-                          <button
-                            onClick={e => { e.stopPropagation(); handleFollowToggle(m.uid); }}
-                            disabled={followToggling === m.uid}
-                            title={followingSet.has(m.uid) ? 'Unfollow' : 'Follow'}
-                            className={`p-1.5 rounded-lg transition-transform active:scale-95 disabled:opacity-50 ${
-                              followingSet.has(m.uid)
-                                ? 'bg-indigo-50 text-indigo-500'
-                                : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-500'
-                            }`}
-                          >
-                            {followingSet.has(m.uid) ? <UserCheck size={13} /> : <UserPlus size={13} />}
-                          </button>
-                        )}
                         {m.uid !== user?.uid && m.fcmToken && (() => {
                           const ns = nudgeStatuses[m.uid];
                           const isLimited = ns === 'limited';
@@ -419,6 +405,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                             </button>
                           );
                         })()}
+                        {m.uid !== user?.uid && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleFollowToggle(m.uid); }}
+                            disabled={followToggling === m.uid}
+                            title={followingSet.has(m.uid) ? 'Unfollow' : 'Follow'}
+                            className={`p-1.5 rounded-lg transition-transform active:scale-95 disabled:opacity-50 ${
+                              followingSet.has(m.uid)
+                                ? 'bg-indigo-50 text-indigo-500'
+                                : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-500'
+                            }`}
+                          >
+                            {followingSet.has(m.uid) ? <UserCheck size={13} /> : <UserPlus size={13} />}
+                          </button>
+                        )}
                         {tappable && <ChevronRight size={14} className="text-gray-300" />}
                       </div>
                     </div>
