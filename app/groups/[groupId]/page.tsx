@@ -59,7 +59,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 
   const [memberProfiles, setMemberProfiles] = useState<{
-    uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string;
+    uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string; fcmToken?: string;
   }[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
@@ -79,7 +79,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const loaded = await Promise.all(activeDocs.map(async m => {
         const snap = await getDoc(doc(db, 'users', m.userId));
         const data = snap.exists() ? snap.data() : null;
-        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0 };
+        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0, fcmToken: data?.fcmToken };
       }));
       setMemberProfiles(loaded);
       setLoadingMembers(false);
@@ -396,7 +396,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                             </button>
                           );
                         })()}
-                        {m.uid !== user?.uid && (() => {
+                        {m.uid !== user?.uid && m.fcmToken && (() => {
                           const ns = nudgeStatuses[m.uid];
                           const isLimited = ns === 'limited';
                           const isSending = ns === 'sending';
