@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "quests",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "deadline", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
