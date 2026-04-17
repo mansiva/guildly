@@ -62,6 +62,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Write to notification inbox ──────────────────────────────────────
+    await adminDb.collection(`notifications/${recipientId}/items`).add({
+      type: 'nudge',
+      fromUid: senderId,
+      fromName: senderName,
+      groupId,
+      groupName,
+      read: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
     // ── Update rate limit doc ─────────────────────────────────────────────
     await nudgeRef.set(
       { lastSentAt: FieldValue.serverTimestamp(), senderId, recipientId },

@@ -208,22 +208,35 @@ export async function POST(req: NextRequest) {
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      // ── Push notifications to all contributors (non-blocking) ──────────
-      // Fire and forget — never block the response on notification sends
+      // ── Notify + push all contributors (non-blocking) ─────────────────
       void (async () => {
         try {
           const completerUserSnap = await adminDb.doc(`users/${userId}`).get();
           const completerName = completerUserSnap.data()?.displayName || 'Someone';
+          const groupSnap = await adminDb.doc(`groups/${groupId}`).get();
+          const groupName = groupSnap.data()?.name || '';
 
           const notifPromises: Promise<unknown>[] = [];
           for (const [uid, contributed] of Object.entries(contributions)) {
-            // Skip the user who just triggered completion (they're already in the app)
-            if (uid === userId) continue;
-
             const participationPct = Math.round((contributed as number / (finalQuest.targetValue || 1)) * 100);
             const deferredForUid = Math.floor(
               Math.min((contributed as number) / (finalQuest.targetValue || 1), 1) * questXp * 0.5
             );
+
+            // Write to Firestore notification inbox for every contributor
+            notifPromises.push(
+              adminDb.collection(`notifications/${uid}/items`).add({
+                type: 'quest_complete',
+                questTitle: quest.title,
+                groupId,
+                groupName,
+                read: false,
+                createdAt: FieldValue.serverTimestamp(),
+              })
+            );
+
+            // FCM push only to non-triggering users (triggering user is in-app)
+            if (uid === userId) continue;
 
             const contribUserSnap = await adminDb.doc(`users/${uid}`).get();
             const fcmToken = contribUserSnap.data()?.fcmToken as string | undefined;
@@ -236,9 +249,7 @@ export async function POST(req: NextRequest) {
                   title: 'Quest Complete! 🏆',
                   body: `${completerName} just completed '${quest.title}'! You contributed ${participationPct}% — ${deferredForUid} XP incoming 🎉`,
                 },
-                webpush: {
-                  notification: { icon: '/icon-192.png' },
-                },
+                webpush: { notification: { icon: '/icon-192.png' } },
               }).catch(err => console.error(`[FCM] Quest completion notify failed for ${uid}:`, err))
             );
           }
