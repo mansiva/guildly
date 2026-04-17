@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminDb } from '@/lib/firebase-admin';
+import { getAdminDb, getAdminMessaging } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getNudgeForMilestone } from '@/lib/nudges';
 import { checkBadges, BadgeDef } from '@/lib/badges';
@@ -207,6 +207,46 @@ export async function POST(req: NextRequest) {
         nudge: `🏆 Quest complete! "${quest.title}" — ${questXp} XP earned! ⭐ ${topUserName} led the way as top contributor!`,
         createdAt: FieldValue.serverTimestamp(),
       });
+
+      // ── Push notifications to all contributors (non-blocking) ──────────
+      // Fire and forget — never block the response on notification sends
+      void (async () => {
+        try {
+          const completerUserSnap = await adminDb.doc(`users/${userId}`).get();
+          const completerName = completerUserSnap.data()?.displayName || 'Someone';
+
+          const notifPromises: Promise<unknown>[] = [];
+          for (const [uid, contributed] of Object.entries(contributions)) {
+            // Skip the user who just triggered completion (they're already in the app)
+            if (uid === userId) continue;
+
+            const participationPct = Math.round((contributed as number / (finalQuest.targetValue || 1)) * 100);
+            const deferredForUid = Math.floor(
+              Math.min((contributed as number) / (finalQuest.targetValue || 1), 1) * questXp * 0.5
+            );
+
+            const contribUserSnap = await adminDb.doc(`users/${uid}`).get();
+            const fcmToken = contribUserSnap.data()?.fcmToken as string | undefined;
+            if (!fcmToken) continue;
+
+            notifPromises.push(
+              getAdminMessaging().send({
+                token: fcmToken,
+                notification: {
+                  title: 'Quest Complete! 🏆',
+                  body: `${completerName} just completed '${quest.title}'! You contributed ${participationPct}% — ${deferredForUid} XP incoming 🎉`,
+                },
+                webpush: {
+                  notification: { icon: '/icon-192.png' },
+                },
+              }).catch(err => console.error(`[FCM] Quest completion notify failed for ${uid}:`, err))
+            );
+          }
+          await Promise.all(notifPromises);
+        } catch (notifErr) {
+          console.error('[FCM] Quest completion notification block failed:', notifErr);
+        }
+      })();
     }
 
     return NextResponse.json({

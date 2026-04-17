@@ -11,11 +11,11 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock, Bell } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
-  getDocs, query, where, getDoc, setDoc
+  getDocs, query, where, getDoc, setDoc, Timestamp as FsTimestamp
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Quest } from '@/types';
@@ -53,6 +53,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
   const [friendStatuses, setFriendStatuses] = useState<Record<string, 'none' | 'pending' | 'accepted'>>({});
+  // nudgeStatus: tracks per-recipient whether sender has recently nudged them
+  const [nudgeStatuses, setNudgeStatuses] = useState<Record<string, 'ok' | 'limited' | 'sending'>>({});
 
   function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 
@@ -87,6 +89,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         statuses[m.uid] = fsSnap.exists() ? fsSnap.data().status as 'pending' | 'accepted' : 'none';
       }));
       setFriendStatuses(statuses);
+
+      // Check nudge rate limits client-side (6h window)
+      const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+      const nudges: Record<string, 'ok' | 'limited' | 'sending'> = {};
+      await Promise.all(loaded.filter(m => m.uid !== myUid).map(async m => {
+        const nudgeSnap = await getDoc(doc(db, 'nudges', `${myUid}_${m.uid}`));
+        if (nudgeSnap.exists()) {
+          const lastSentAt = (nudgeSnap.data().lastSentAt as FsTimestamp | null)?.toMillis?.() ?? 0;
+          nudges[m.uid] = Date.now() - lastSentAt < SIX_HOURS_MS ? 'limited' : 'ok';
+        } else {
+          nudges[m.uid] = 'ok';
+        }
+      }));
+      setNudgeStatuses(nudges);
     }
     load().catch(console.error);
   }, [memberDocs, user?.uid]);
@@ -177,6 +193,37 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       userA: a, userB: b, initiator: user.uid, status: 'pending', createdAt: serverTimestamp(),
     });
     setFriendStatuses(prev => ({ ...prev, [toUid]: 'pending' }));
+  }
+
+  async function handleNudge(recipientUid: string) {
+    if (!user || !group) return;
+    setNudgeStatuses(prev => ({ ...prev, [recipientUid]: 'sending' }));
+    try {
+      const res = await fetch('/api/nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: user.uid,
+          recipientId: recipientUid,
+          groupId,
+          groupName: group.name,
+        }),
+      });
+      if (res.ok) {
+        setNudgeStatuses(prev => ({ ...prev, [recipientUid]: 'limited' }));
+      } else {
+        const data = await res.json();
+        if (data.rateLimited) {
+          setNudgeStatuses(prev => ({ ...prev, [recipientUid]: 'limited' }));
+        } else {
+          setNudgeStatuses(prev => ({ ...prev, [recipientUid]: 'ok' }));
+          console.error('[Nudge] Failed:', data.error);
+        }
+      }
+    } catch (err) {
+      setNudgeStatuses(prev => ({ ...prev, [recipientUid]: 'ok' }));
+      console.error('[Nudge] Error:', err);
+    }
   }
 
   async function handlePromote(uid: string) {
@@ -346,6 +393,27 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                             <button onClick={e => { e.stopPropagation(); sendFriendRequest(m.uid); }}
                               className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 active:scale-95 transition-transform">
                               <UserPlus size={13} />
+                            </button>
+                          );
+                        })()}
+                        {m.uid !== user?.uid && (() => {
+                          const ns = nudgeStatuses[m.uid];
+                          const isLimited = ns === 'limited';
+                          const isSending = ns === 'sending';
+                          return (
+                            <button
+                              onClick={e => { e.stopPropagation(); if (!isLimited && !isSending) handleNudge(m.uid); }}
+                              disabled={isLimited || isSending}
+                              title={isLimited ? 'Already nudged recently' : 'Nudge to log progress'}
+                              className={`p-1.5 rounded-lg transition-transform ${
+                                isLimited
+                                  ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                  : isSending
+                                  ? 'bg-amber-50 text-amber-300 cursor-wait'
+                                  : 'bg-amber-50 text-amber-500 active:scale-95'
+                              }`}
+                            >
+                              <Bell size={13} />
                             </button>
                           );
                         })()}

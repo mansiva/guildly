@@ -65,5 +65,17 @@ service cloud.firestore {
       allow create: if request.auth != null;
       allow update: if request.auth != null;
     }
+
+    match /nudges/{nudgeDoc} {
+      // Authenticated users can read nudge docs where they are sender or recipient.
+      // Doc ID format: {senderId}_{recipientId}
+      // Use request.auth.uid in the doc ID check to handle non-existent docs safely.
+      allow read: if request.auth != null &&
+        (nudgeDoc.matches(request.auth.uid + '_.*') || nudgeDoc.matches('.*_' + request.auth.uid));
+      // Only the sender can create/update (server-side API handles the actual write via Admin SDK)
+      // Client-side reads are the main use case; writes go through /api/nudge
+      allow write: if request.auth != null &&
+        nudgeDoc.matches(request.auth.uid + '_.*');
+    }
   }
 }
