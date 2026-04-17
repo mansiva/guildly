@@ -473,6 +473,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                   members={memberProfiles}
                   quests={quests.map(q => ({ id: q.id, title: q.title, unit: q.unit }))}
                   groupId={groupId}
+                  groupName={group?.name}
                   currentUserId={user?.uid}
                 />
               ))}

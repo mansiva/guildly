@@ -28,10 +28,11 @@ interface Props {
   members?: MemberProfile[];
   quests?: QuestRef[];
   groupId?: string;
+  groupName?: string;
   currentUserId?: string;
 }
 
-export default function FeedItem({ entry, members, quests, groupId, currentUserId }: Props) {
+export default function FeedItem({ entry, members, quests, groupId, groupName, currentUserId }: Props) {
   const [reactions, setReactions] = useState<Record<string, string[]>>(entry.reactions ?? {});
   const [showPicker, setShowPicker] = useState(false);
   const emojiInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +78,7 @@ export default function FeedItem({ entry, members, quests, groupId, currentUserI
             feedEntryId: entry.id,
             questTitle: quest?.title,
             groupId,
+            groupName,
           });
         }
       }

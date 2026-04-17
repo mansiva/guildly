@@ -470,6 +470,7 @@ export default function DashboardPage() {
                       members={memberProfiles}
                       quests={allActiveQuests.filter(a => a.groupId === primaryGroupId).map(a => ({ id: a.quest.id, title: a.quest.title }))}
                       groupId={primaryGroupId ?? undefined}
+                      groupName={groups.find(g => g.id === primaryGroupId)?.name}
                       currentUserId={user?.uid}
                     />
                   ))}
