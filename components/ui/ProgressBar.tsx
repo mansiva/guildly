@@ -5,15 +5,16 @@ interface ProgressBarProps {
   max: number;
   className?: string;
   color?: string;
+  trackColor?: string;
   showLabel?: boolean;
 }
 
-export default function ProgressBar({ value, max, className, color = 'bg-indigo-500', showLabel = false }: ProgressBarProps) {
+export default function ProgressBar({ value, max, className, color = 'bg-indigo-500', trackColor = 'bg-gray-200', showLabel = false }: ProgressBarProps) {
   const pct = Math.min(100, Math.round((value / max) * 100));
 
   return (
     <div className={cn('w-full', className)}>
-      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+      <div className={cn('w-full rounded-full h-2 overflow-hidden', trackColor)}>
         <div
           className={cn('h-full rounded-full transition-all duration-500', color)}
           style={{ width: `${pct}%` }}

@@ -31,6 +31,14 @@ export async function requestNotificationPermission(uid: string): Promise<void> 
       return;
     }
 
+    // Only request if not already decided
+    if (Notification.permission === 'granted') {
+      // Already granted — just (re-)register the token
+    } else if (Notification.permission === 'denied') {
+      console.log('[FCM] Notification permission previously denied.');
+      return;
+    }
+
     // Request browser permission
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
