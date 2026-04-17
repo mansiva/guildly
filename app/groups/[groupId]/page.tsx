@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock, Zap } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, UserCheck, Share2, Trash2, Shield, ChevronRight, X, LogOut, Zap } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -52,11 +52,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [showQuestForm, setShowQuestForm] = useState(false);
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
-  const [friendStatuses, setFriendStatuses] = useState<Record<string, 'none' | 'pending' | 'accepted'>>({});
+  const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+  const [followToggling, setFollowToggling] = useState<string | null>(null);
   // nudgeStatus: tracks per-recipient whether sender has recently nudged them
   const [nudgeStatuses, setNudgeStatuses] = useState<Record<string, 'ok' | 'limited' | 'sending'>>({});
 
-  function friendshipId(a: string, b: string) { return [a, b].sort().join('_'); }
 
   const [memberProfiles, setMemberProfiles] = useState<{
     uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string; fcmToken?: string;
@@ -83,12 +83,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       }));
       setMemberProfiles(loaded);
       setLoadingMembers(false);
-      const statuses: Record<string, 'none' | 'pending' | 'accepted'> = {};
-      await Promise.all(loaded.filter(m => m.uid !== myUid).map(async m => {
-        const fsSnap = await getDoc(doc(db, 'friendships', friendshipId(myUid, m.uid)));
-        statuses[m.uid] = fsSnap.exists() ? fsSnap.data().status as 'pending' | 'accepted' : 'none';
-      }));
-      setFriendStatuses(statuses);
+      // Load follow statuses
+      const followSnap = await getDocs(query(collection(db, 'follows'), where('followerId', '==', myUid)));
+      setFollowingSet(new Set(followSnap.docs.map(d => d.data().followeeId as string)));
 
       // Check nudge rate limits client-side (6h window)
       const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -185,14 +182,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
     }
   }
 
-  async function sendFriendRequest(toUid: string) {
+  async function handleFollowToggle(toUid: string) {
     if (!user) return;
-    const id = friendshipId(user.uid, toUid);
-    const [a, b] = id.split('_');
-    await setDoc(doc(db, 'friendships', id), {
-      userA: a, userB: b, initiator: user.uid, status: 'pending', createdAt: serverTimestamp(),
-    });
-    setFriendStatuses(prev => ({ ...prev, [toUid]: 'pending' }));
+    setFollowToggling(toUid);
+    try {
+      if (followingSet.has(toUid)) {
+        await deleteDoc(doc(db, 'follows', `${user.uid}_${toUid}`));
+        setFollowingSet(prev => { const s = new Set(prev); s.delete(toUid); return s; });
+      } else {
+        await setDoc(doc(db, 'follows', `${user.uid}_${toUid}`), {
+          followerId: user.uid, followeeId: toUid, createdAt: serverTimestamp(),
+        });
+        setFollowingSet(prev => new Set([...prev, toUid]));
+      }
+    } finally { setFollowToggling(null); }
   }
 
   async function handleNudge(recipientUid: string) {
@@ -381,21 +384,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {m.uid !== user?.uid && (() => {
-                          const fs = friendStatuses[m.uid];
-                          if (fs === 'accepted') return null;
-                          if (fs === 'pending') return (
-                            <span className="p-1.5 rounded-lg bg-gray-50 text-gray-400 flex items-center">
-                              <Clock size={13} />
-                            </span>
-                          );
-                          return (
-                            <button onClick={e => { e.stopPropagation(); sendFriendRequest(m.uid); }}
-                              className="p-1.5 rounded-lg bg-indigo-50 text-indigo-500 active:scale-95 transition-transform">
-                              <UserPlus size={13} />
-                            </button>
-                          );
-                        })()}
+                        {m.uid !== user?.uid && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleFollowToggle(m.uid); }}
+                            disabled={followToggling === m.uid}
+                            title={followingSet.has(m.uid) ? 'Unfollow' : 'Follow'}
+                            className={`p-1.5 rounded-lg transition-transform active:scale-95 disabled:opacity-50 ${
+                              followingSet.has(m.uid)
+                                ? 'bg-indigo-50 text-indigo-500'
+                                : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-500'
+                            }`}
+                          >
+                            {followingSet.has(m.uid) ? <UserCheck size={13} /> : <UserPlus size={13} />}
+                          </button>
+                        )}
                         {m.uid !== user?.uid && m.fcmToken && (() => {
                           const ns = nudgeStatuses[m.uid];
                           const isLimited = ns === 'limited';

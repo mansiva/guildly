@@ -249,12 +249,6 @@ export default function FriendsPage() {
             <p className="text-xl font-bold text-gray-900">{followers.length}</p>
             <p className="text-xs text-gray-400">Followers</p>
           </div>
-          <div className="flex-1 bg-white rounded-2xl border border-gray-100 p-3 text-center">
-            <p className="text-xl font-bold text-indigo-600">
-              {followers.filter(f => followingSet.has(f.uid)).length}
-            </p>
-            <p className="text-xs text-gray-400">Mutuals 🤝</p>
-          </div>
         </div>
 
         {/* Tabs */}
@@ -279,42 +273,55 @@ export default function FriendsPage() {
           </div>
         ) : (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-            {list.map((p, i) => {
-              const isMutual = tab === 'followers'
-                ? followingSet.has(p.uid)
-                : followerUidSet.has(p.uid);
+            {list.map((p) => {
               const isFollowingThem = followingSet.has(p.uid);
+              const isMutual = followerUidSet.has(p.uid) && followingSet.has(p.uid);
               return (
                 <div key={p.uid}
                   className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
-                  <div className="w-7 text-center shrink-0">
-                    {isMutual
-                      ? <span title="Mutual" className="text-base">🤝</span>
-                      : <span className="text-sm font-bold text-gray-300">{i + 1}</span>}
-                  </div>
                   <UserAvatar photoURL={p.photoURL} displayName={p.displayName} xp={p.xp} size="sm" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{p.displayName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{p.displayName}</p>
+                      {isMutual && (
+                        <span className="text-xs text-indigo-500 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-full">mutual</span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400">Level {p.level} · {p.xp.toLocaleString()} XP</p>
                   </div>
-                  {tab === 'followers' && !isFollowingThem && (
-                    <button
-                      onClick={() => handleFollow(p.uid)}
-                      disabled={toggling === p.uid}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
-                    >
-                      <UserPlus size={12} />
-                      Follow
-                    </button>
+
+                  {/* Followers tab: follow-back or mutual indicator */}
+                  {tab === 'followers' && (
+                    isFollowingThem ? (
+                      <button
+                        onClick={() => handleUnfollow(p.uid)}
+                        disabled={toggling === p.uid}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
+                      >
+                        <UserCheck size={12} />
+                        {isMutual ? 'Following' : 'Following'}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleFollow(p.uid)}
+                        disabled={toggling === p.uid}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
+                      >
+                        <UserPlus size={12} />
+                        {toggling === p.uid ? '…' : 'Follow back'}
+                      </button>
+                    )
                   )}
-                  {isFollowingThem && (
+
+                  {/* Following tab: unfollow button */}
+                  {tab === 'following' && (
                     <button
                       onClick={() => handleUnfollow(p.uid)}
                       disabled={toggling === p.uid}
                       className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
                     >
                       <UserCheck size={12} />
-                      Following
+                      {toggling === p.uid ? '…' : isMutual ? 'Mutual' : 'Following'}
                     </button>
                   )}
                 </div>
