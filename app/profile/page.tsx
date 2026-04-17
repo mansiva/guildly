@@ -8,7 +8,7 @@ import AppShell from '@/components/layout/AppShell';
 import ProgressBar from '@/components/ui/ProgressBar';
 import UserAvatar from '@/components/ui/UserAvatar';
 import { xpToLevel } from '@/lib/utils';
-import { LogOut, Star, Pencil, Check, X, Bell, BellOff } from 'lucide-react';
+import { LogOut, Star, Pencil, Check, X, Bell, BellOff, Download } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/types';
 import { BADGE_DEFS } from '@/lib/badges';
@@ -122,6 +122,9 @@ export default function ProfilePage() {
   const [savingName, setSavingName] = useState(false);
   const [selectedBadge, setSelectedBadge] = useState<(Badge & { tier?: number }) | null>(null);
   const [togglingNotif, setTogglingNotif] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -130,6 +133,25 @@ export default function ProfilePage() {
     });
     return unsub;
   }, [user]);
+
+  useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+    setInstalling(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (installPrompt as any).prompt();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { outcome } = await (installPrompt as any).userChoice;
+      if (outcome === 'accepted') { setInstallPrompt(null); setIsStandalone(true); }
+    } finally { setInstalling(false); }
+  }
 
   async function handleLogout() {
     await logout();
@@ -171,6 +193,8 @@ export default function ProfilePage() {
     setTogglingNotif(true);
     try {
       await updateDoc(doc(db, 'users', user.uid), { fcmToken: deleteField() });
+      // Clear dismissed flag so setup panel reappears on dashboard
+      localStorage.removeItem('setup-panel-dismissed');
     } finally {
       setTogglingNotif(false);
     }
@@ -271,6 +295,34 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
+
+        {/* Install app */}
+        {!isStandalone && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Download size={18} className="text-indigo-500" />
+              <h2 className="font-bold text-gray-900">Install App</h2>
+            </div>
+            <div className="bg-white rounded-3xl p-4 border border-gray-100 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-900">Add to home screen</p>
+                <p className="text-xs text-gray-400 mt-0.5">Faster access, full-screen experience</p>
+              </div>
+              {installPrompt ? (
+                <button
+                  onClick={handleInstall}
+                  disabled={installing}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium disabled:opacity-50 active:scale-95 transition-transform"
+                >
+                  <Download size={15} />
+                  {installing ? 'Installing…' : 'Install'}
+                </button>
+              ) : (
+                <span className="text-xs text-gray-400">Open in Chrome</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Notifications */}
         <div className="mb-6">

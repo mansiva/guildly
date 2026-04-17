@@ -16,7 +16,7 @@ import { Group, Quest } from '@/types';
 import Link from 'next/link';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import { updateDoc, doc as firestoreDoc, addDoc, collection, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { Plus, UserPlus, Share2, Bell, X } from 'lucide-react';
+import { Plus, UserPlus, Bell, X, Download } from 'lucide-react';
 import { requestNotificationPermission } from '@/lib/messaging';
 
 const GROUP_EMOJIS = ['🔥', '⚡', '🚀', '🎯', '💪', '🏆', '🌟', '🎮', '🧠', '❤️', '🌿', '🎨'];
@@ -75,8 +75,10 @@ export default function DashboardPage() {
   const [groupFormSaving, setGroupFormSaving] = useState(false);
   const [groupFormError, setGroupFormError] = useState('');
   const [userData, setUserData] = useState<{ xp: number; displayName: string; fcmToken?: string } | null>(null);
-  const [showNotifBanner, setShowNotifBanner] = useState(false);
-  const [notifBannerLoading, setNotifBannerLoading] = useState(false);
+  const [setupPanel, setSetupPanel] = useState<{ notif: boolean; install: boolean } | null>(null);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
+  const [isStandalone, setIsStandalone] = useState(false);
 
   const { groups } = useUserGroups(uid);
   const groupIds = groups.map(g => g.id);
@@ -116,31 +118,53 @@ export default function DashboardPage() {
     });
   }, [user]);
 
-  // Show soft notification banner once per browser if not yet enabled
+  // Detect standalone PWA mode and capture install prompt
+  useEffect(() => {
+    setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    const handler = (e: Event) => { e.preventDefault(); setInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  // Compute setup panel visibility
   useEffect(() => {
     if (!user || userData === null) return;
-    if (userData.fcmToken) return; // already enabled
-    if (typeof Notification === 'undefined') return; // not supported
-    if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
-    const dismissed = localStorage.getItem('notif-banner-dismissed');
-    if (!dismissed) setShowNotifBanner(true);
-  }, [user, userData]);
+    const panelDismissed = localStorage.getItem('setup-panel-dismissed');
+    if (panelDismissed) return;
+    const needsNotif = !userData.fcmToken;
+    const needsInstall = !isStandalone;
+    if (needsNotif || needsInstall) setSetupPanel({ notif: needsNotif, install: needsInstall });
+  }, [user, userData, isStandalone]);
 
-  async function handleBannerEnable() {
-    if (!user) return;
-    setNotifBannerLoading(true);
-    try {
-      await requestNotificationPermission(user.uid);
-    } finally {
-      setNotifBannerLoading(false);
-      setShowNotifBanner(false);
-      localStorage.setItem('notif-banner-dismissed', '1');
+  async function handleSetupInstall() {
+    if (!installPrompt) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (installPrompt as any).prompt();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { outcome } = await (installPrompt as any).userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+      setIsStandalone(true);
+      setSetupPanel(prev => prev ? { ...prev, install: false } : null);
     }
   }
 
-  function handleBannerDismiss() {
-    setShowNotifBanner(false);
-    localStorage.setItem('notif-banner-dismissed', '1');
+  async function handleSetupNotif() {
+    if (!user) return;
+    setNotifLoading(true);
+    try {
+      const result = await requestNotificationPermission(user.uid);
+      if (result.status === 'denied') alert('Notifications blocked. Enable them in browser settings.');
+      else if (result.status === 'error') alert('Could not enable notifications: ' + result.message);
+      else setSetupPanel(prev => prev ? { ...prev, notif: false } : null);
+    } finally {
+      setNotifLoading(false);
+    }
+  }
+
+  function handleSetupDismiss() {
+    setSetupPanel(null);
+    localStorage.setItem('setup-panel-dismissed', '1');
   }
 
   useEffect(() => {
@@ -227,34 +251,56 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="px-4 pt-6 pb-4">
-        {/* Soft notification banner */}
-        {showNotifBanner && (
-          <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex items-start gap-3">
-            <div className="mt-0.5 w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
-              <Bell size={16} className="text-indigo-600" />
+        {/* Setup guide panel */}
+        {setupPanel && (setupPanel.notif || setupPanel.install) && (
+          <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-2xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-bold text-gray-900">⚡ Set up Guildly</p>
+              <button onClick={handleSetupDismiss} className="text-gray-300 hover:text-gray-400">
+                <X size={16} />
+              </button>
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-gray-900">Stay in the loop 🔔</p>
-              <p className="text-xs text-gray-500 mt-0.5">Get notified when quests complete or teammates nudge you.</p>
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={handleBannerEnable}
-                  disabled={notifBannerLoading}
-                  className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
-                >
-                  {notifBannerLoading ? 'Enabling…' : 'Enable'}
-                </button>
-                <button
-                  onClick={handleBannerDismiss}
-                  className="px-4 py-1.5 bg-white text-gray-500 text-xs font-medium rounded-xl border border-gray-200"
-                >
-                  Not now
-                </button>
-              </div>
+            <div className="space-y-2">
+              {setupPanel.install && (
+                <div className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-indigo-100">
+                  <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Download size={14} className="text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-900">Install the app</p>
+                    <p className="text-xs text-gray-400">Add to home screen for the best experience</p>
+                  </div>
+                  {installPrompt ? (
+                    <button
+                      onClick={handleSetupInstall}
+                      className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg flex-shrink-0"
+                    >
+                      Install
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-400 flex-shrink-0">Open in Chrome</span>
+                  )}
+                </div>
+              )}
+              {setupPanel.notif && (
+                <div className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-indigo-100">
+                  <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Bell size={14} className="text-indigo-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-900">Enable notifications</p>
+                    <p className="text-xs text-gray-400">Get alerts for quests and nudges</p>
+                  </div>
+                  <button
+                    onClick={handleSetupNotif}
+                    disabled={notifLoading}
+                    className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg flex-shrink-0 disabled:opacity-50"
+                  >
+                    {notifLoading ? '…' : 'Enable'}
+                  </button>
+                </div>
+              )}
             </div>
-            <button onClick={handleBannerDismiss} className="text-gray-300 hover:text-gray-400">
-              <X size={16} />
-            </button>
           </div>
         )}
 
