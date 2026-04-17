@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Quest } from '@/types';
 import { Plus, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
-import LogProgressModal from './LogProgressModal';
+import LogProgressModal, { CompletionData } from './LogProgressModal';
+import QuestCompleteOverlay from './QuestCompleteOverlay';
 import { DIFFICULTY_LABELS } from '@/lib/questXp';
 
 function toDate(value: unknown): Date | null {
@@ -37,6 +38,7 @@ export interface QuestMember {
   uid: string;
   displayName: string;
   photoURL?: string;
+  xp?: number;
 }
 
 interface Props {
@@ -54,6 +56,19 @@ interface Props {
 export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupLabel, members = [] }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  const [completionData, setCompletionData] = useState<CompletionData | null>(null);
+
+  function handleComplete(data: CompletionData) {
+    // Enrich with display names from members prop
+    const enriched = {
+      ...data,
+      contributions: data.contributions.map(c => {
+        const m = members.find(mb => mb.uid === c.uid);
+        return { ...c, displayName: m?.displayName ?? 'Unknown', photoURL: m?.photoURL, xp: m?.xp ?? 0 };
+      }),
+    };
+    setCompletionData(enriched as CompletionData & { contributions: typeof enriched.contributions });
+  }
 
   const total = quest.targetValue || 1;
   const current = quest.currentValue || 0;
@@ -194,7 +209,24 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
       </div>
 
       {showLog && canLog && (
-        <LogProgressModal quest={quest} userId={userId} groupId={groupId} onClose={() => setShowLog(false)} />
+        <LogProgressModal
+          quest={quest}
+          userId={userId}
+          groupId={groupId}
+          onClose={() => setShowLog(false)}
+          onComplete={handleComplete}
+        />
+      )}
+
+      {completionData && (
+        <QuestCompleteOverlay
+          questTitle={completionData.questTitle}
+          unit={completionData.unit}
+          targetValue={completionData.targetValue}
+          totalXp={completionData.totalXp}
+          contributions={(completionData as any).contributions}
+          onDismiss={() => setCompletionData(null)}
+        />
       )}
     </>
   );

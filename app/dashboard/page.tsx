@@ -112,7 +112,7 @@ export default function DashboardPage() {
   const { members: memberDocs } = useGroupMembers(primaryGroupId, uid);
   const [memberProfiles, setMemberProfiles] = useState<{ uid: string; displayName: string; photoURL?: string; xp: number }[]>([]);
   // Members per group for quest contributor lists
-  const [membersByGroup, setMembersByGroup] = useState<Record<string, { uid: string; displayName: string; photoURL?: string }[]>>({});
+  const [membersByGroup, setMembersByGroup] = useState<Record<string, { uid: string; displayName: string; photoURL?: string; xp: number }[]>>({});
 
   // Primary group for feed display
   useEffect(() => {
@@ -208,11 +208,11 @@ export default function DashboardPage() {
         const uid = d.data().userId as string;
         const usnap = await getDoc(firestoreDoc(db, 'users', uid));
         const data = usnap.exists() ? usnap.data() : null;
-        return { uid, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL };
+        return { uid, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp ?? 0 };
       }));
       return { gid, profiles };
     })).then(results => {
-      const map: Record<string, { uid: string; displayName: string; photoURL?: string }[]> = {};
+      const map: Record<string, { uid: string; displayName: string; photoURL?: string; xp: number }[]> = {};
       results.forEach(r => { map[r.gid] = r.profiles; });
       setMembersByGroup(map);
     });
