@@ -16,49 +16,52 @@ import { doc, updateDoc } from 'firebase/firestore';
 import app from '@/lib/firebase';
 import { db } from '@/lib/firebase';
 
-export async function requestNotificationPermission(uid: string): Promise<void> {
+export type NotificationResult =
+  | { status: 'granted'; token: string }
+  | { status: 'denied' }
+  | { status: 'unsupported' }
+  | { status: 'error'; message: string };
+
+export async function requestNotificationPermission(uid: string): Promise<NotificationResult> {
   try {
     // FCM requires service workers — not supported in all environments
     const supported = await isSupported();
     if (!supported) {
       console.log('[FCM] Not supported in this environment.');
-      return;
+      return { status: 'unsupported' };
     }
 
-    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+    const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY?.trim();
     if (!vapidKey || vapidKey === 'YOUR_VAPID_KEY_HERE') {
       console.warn('[FCM] VAPID key not configured. Skipping notification setup.');
-      return;
+      return { status: 'error', message: 'VAPID key not configured' };
     }
 
-    // Only request if not already decided
-    if (Notification.permission === 'granted') {
-      // Already granted — just (re-)register the token
-    } else if (Notification.permission === 'denied') {
+    if (Notification.permission === 'denied') {
       console.log('[FCM] Notification permission previously denied.');
-      return;
+      return { status: 'denied' };
     }
 
-    // Request browser permission
+    // Request browser permission (will show system popup)
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       console.log('[FCM] Notification permission denied.');
-      return;
+      return { status: 'denied' };
     }
 
+    // Let Firebase register and manage the SW at its own scope automatically
     const messaging = getMessaging(app);
-    const token = await getToken(messaging, {
-      vapidKey,
-      serviceWorkerRegistration: await navigator.serviceWorker.register('/firebase-messaging-sw.js'),
-    });
+    const token = await getToken(messaging, { vapidKey });
 
     if (token) {
-      // Save token to Firestore so backend can send targeted notifications
       await updateDoc(doc(db, 'users', uid), { fcmToken: token });
       console.log('[FCM] Token saved for user:', uid);
+      return { status: 'granted', token };
     }
+
+    return { status: 'error', message: 'Failed to get FCM token' };
   } catch (err) {
-    // Non-fatal: notification permission errors should never break the app
     console.error('[FCM] Error setting up notifications:', err);
+    return { status: 'error', message: err instanceof Error ? err.message : String(err) };
   }
 }

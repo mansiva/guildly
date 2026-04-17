@@ -16,7 +16,8 @@ import { Group, Quest } from '@/types';
 import Link from 'next/link';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import { updateDoc, doc as firestoreDoc, addDoc, collection, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { Plus, UserPlus, Share2 } from 'lucide-react';
+import { Plus, UserPlus, Share2, Bell, X } from 'lucide-react';
+import { requestNotificationPermission } from '@/lib/messaging';
 
 const GROUP_EMOJIS = ['🔥', '⚡', '🚀', '🎯', '💪', '🏆', '🌟', '🎮', '🧠', '❤️', '🌿', '🎨'];
 function generateCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
@@ -73,7 +74,9 @@ export default function DashboardPage() {
   const [joinCode, setJoinCode] = useState('');
   const [groupFormSaving, setGroupFormSaving] = useState(false);
   const [groupFormError, setGroupFormError] = useState('');
-  const [userData, setUserData] = useState<{ xp: number; displayName: string } | null>(null);
+  const [userData, setUserData] = useState<{ xp: number; displayName: string; fcmToken?: string } | null>(null);
+  const [showNotifBanner, setShowNotifBanner] = useState(false);
+  const [notifBannerLoading, setNotifBannerLoading] = useState(false);
 
   const { groups } = useUserGroups(uid);
   const groupIds = groups.map(g => g.id);
@@ -108,10 +111,37 @@ export default function DashboardPage() {
     getDoc(doc(db, 'users', user.uid)).then(snap => {
       if (snap.exists()) {
         const data = snap.data();
-        setUserData({ xp: data.xp || 0, displayName: data.displayName });
+        setUserData({ xp: data.xp || 0, displayName: data.displayName, fcmToken: data.fcmToken });
       }
     });
   }, [user]);
+
+  // Show soft notification banner once per browser if not yet enabled
+  useEffect(() => {
+    if (!user || userData === null) return;
+    if (userData.fcmToken) return; // already enabled
+    if (typeof Notification === 'undefined') return; // not supported
+    if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
+    const dismissed = localStorage.getItem('notif-banner-dismissed');
+    if (!dismissed) setShowNotifBanner(true);
+  }, [user, userData]);
+
+  async function handleBannerEnable() {
+    if (!user) return;
+    setNotifBannerLoading(true);
+    try {
+      await requestNotificationPermission(user.uid);
+    } finally {
+      setNotifBannerLoading(false);
+      setShowNotifBanner(false);
+      localStorage.setItem('notif-banner-dismissed', '1');
+    }
+  }
+
+  function handleBannerDismiss() {
+    setShowNotifBanner(false);
+    localStorage.setItem('notif-banner-dismissed', '1');
+  }
 
   useEffect(() => {
     if (memberDocs.length === 0) return;
@@ -197,6 +227,37 @@ export default function DashboardPage() {
   return (
     <AppShell>
       <div className="px-4 pt-6 pb-4">
+        {/* Soft notification banner */}
+        {showNotifBanner && (
+          <div className="mb-4 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex items-start gap-3">
+            <div className="mt-0.5 w-8 h-8 bg-indigo-100 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Bell size={16} className="text-indigo-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-900">Stay in the loop 🔔</p>
+              <p className="text-xs text-gray-500 mt-0.5">Get notified when quests complete or teammates nudge you.</p>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleBannerEnable}
+                  disabled={notifBannerLoading}
+                  className="px-4 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl disabled:opacity-50"
+                >
+                  {notifBannerLoading ? 'Enabling…' : 'Enable'}
+                </button>
+                <button
+                  onClick={handleBannerDismiss}
+                  className="px-4 py-1.5 bg-white text-gray-500 text-xs font-medium rounded-xl border border-gray-200"
+                >
+                  Not now
+                </button>
+              </div>
+            </div>
+            <button onClick={handleBannerDismiss} className="text-gray-300 hover:text-gray-400">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center gap-3 mb-5">
           <UserAvatar

@@ -155,7 +155,12 @@ export default function ProfilePage() {
     if (!user) return;
     setTogglingNotif(true);
     try {
-      await requestNotificationPermission(user.uid);
+      const result = await requestNotificationPermission(user.uid);
+      if (result.status === 'denied') {
+        alert('Notifications blocked. Please enable them in your browser settings.');
+      } else if (result.status === 'error') {
+        alert('Could not enable notifications: ' + result.message);
+      }
     } finally {
       setTogglingNotif(false);
     }

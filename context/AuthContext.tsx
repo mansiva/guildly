@@ -13,7 +13,6 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import { requestNotificationPermission } from '@/lib/messaging';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -34,10 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setLoading(false);
-      // Request FCM notification permission after auth resolves
-      if (user?.uid) {
-        requestNotificationPermission(user.uid).catch(console.error);
-      }
     });
     return unsubscribe;
   }, []);
