@@ -3,11 +3,14 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { NotificationProvider, useNotificationSheet } from '@/context/NotificationContext';
 import BottomNav from './BottomNav';
+import NotificationSheet from '@/components/notifications/NotificationSheet';
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+function ShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { notifOpen, openNotif, closeNotif } = useNotificationSheet();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -26,7 +29,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {children}
-      <BottomNav />
+      <BottomNav onNotifClick={openNotif} />
+      <NotificationSheet uid={user.uid} open={notifOpen} onClose={closeNotif} />
     </div>
+  );
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <NotificationProvider>
+      <ShellInner>{children}</ShellInner>
+    </NotificationProvider>
   );
 }

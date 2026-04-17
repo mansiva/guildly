@@ -1,0 +1,63 @@
+[debug] [2026-04-17T15:41:56.487Z] ----------------------------------------------------------------------
+[debug] [2026-04-17T15:41:56.488Z] Command:       /usr/local/nvm/versions/node/v22.22.0/bin/node /home/ubuntu/.npm-global/bin/firebase deploy --only firestore:rules --project synergo-75ffb --debug
+[debug] [2026-04-17T15:41:56.488Z] CLI Version:   15.14.0
+[debug] [2026-04-17T15:41:56.488Z] Platform:      linux
+[debug] [2026-04-17T15:41:56.488Z] Node Version:  v22.22.0
+[debug] [2026-04-17T15:41:56.488Z] Time:          Fri Apr 17 2026 15:41:56 GMT+0000 (Coordinated Universal Time)
+[debug] [2026-04-17T15:41:56.488Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-17T15:41:57.007Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-17T15:41:57.088Z] Running auto auth
+[debug] [2026-04-17T15:41:57.088Z] [iam] checking project synergo-75ffb for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-04-17T15:41:57.089Z] No OAuth tokens found
+[debug] [2026-04-17T15:41:57.089Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/synergo-75ffb:testIamPermissions [none]
+[debug] [2026-04-17T15:41:57.089Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/synergo-75ffb:testIamPermissions  x-goog-user-project=synergo-75ffb
+[debug] [2026-04-17T15:41:57.089Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/synergo-75ffb:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-04-17T15:41:57.238Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/synergo-75ffb:testIamPermissions 200
+[debug] [2026-04-17T15:41:57.238Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/synergo-75ffb:testIamPermissions {"permissions":["datastore.indexes.list","firebase.projects.get"]}
+[debug] [2026-04-17T15:41:57.238Z] [iam] error while checking permissions, command may fail: Authorization failed. This account is missing the following required permissions on project synergo-75ffb:
+
+  datastore.indexes.create
+  datastore.indexes.delete
+  datastore.indexes.update
+[info] 
+[info] === Deploying to 'synergo-75ffb'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-04-17T15:41:57.239Z] No OAuth tokens found
+[debug] [2026-04-17T15:41:57.240Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/synergo-75ffb/services/firestore.googleapis.com [none]
+[debug] [2026-04-17T15:41:57.240Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/synergo-75ffb/services/firestore.googleapis.com  x-goog-user-project=synergo-75ffb
+[debug] [2026-04-17T15:41:57.738Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/synergo-75ffb/services/firestore.googleapis.com 403
+[debug] [2026-04-17T15:41:57.738Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/synergo-75ffb/services/firestore.googleapis.com [omitted]
+[error] 
+[error] Error: Request to https://serviceusage.googleapis.com/v1/projects/synergo-75ffb/services/firestore.googleapis.com had HTTP Error: 403, Permission denied to get service [firestore.googleapis.com]
+Help Token: AVnrbfnjzWlERRcApgzYDUv_FAhKzk4ZS4YpfYo_TH-mcY2DrbeN_0iia32zNEqI85mC9L8jdhSzx6ZpV_ZJo6j33TSM3Wr1p7pjM4OWXD-GLIN9
+[debug] [2026-04-17T15:41:57.739Z] Error Context: {
+  "body": {
+    "error": {
+      "code": 403,
+      "message": "Permission denied to get service [firestore.googleapis.com]\nHelp Token: AVnrbfnjzWlERRcApgzYDUv_FAhKzk4ZS4YpfYo_TH-mcY2DrbeN_0iia32zNEqI85mC9L8jdhSzx6ZpV_ZJo6j33TSM3Wr1p7pjM4OWXD-GLIN9",
+      "status": "PERMISSION_DENIED",
+      "details": [
+        {
+          "@type": "type.googleapis.com/google.rpc.PreconditionFailure",
+          "violations": [
+            {
+              "type": "googleapis.com",
+              "subject": "110002"
+            }
+          ]
+        },
+        {
+          "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+          "reason": "AUTH_PERMISSION_DENIED",
+          "domain": "serviceusage.googleapis.com"
+        }
+      ]
+    }
+  },
+  "response": {
+    "statusCode": 403
+  }
+}

@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock, Bell } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, Share2, Trash2, Shield, ChevronRight, X, LogOut, Clock, Zap } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -413,7 +413,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                                   : 'bg-amber-50 text-amber-500 active:scale-95'
                               }`}
                             >
-                              <Bell size={13} />
+                              <Zap size={13} />
                             </button>
                           );
                         })()}
@@ -470,6 +470,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                 <FeedItem key={e.id} entry={e}
                   members={memberProfiles}
                   quests={quests.map(q => ({ id: q.id, title: q.title, unit: q.unit }))}
+                  groupId={groupId}
+                  currentUserId={user?.uid}
                 />
               ))}
             </div>

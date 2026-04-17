@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -18,6 +18,8 @@ import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestF
 import { updateDoc, doc as firestoreDoc, addDoc, collection, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { Plus, UserPlus, Bell, X, Download } from 'lucide-react';
 import { requestNotificationPermission } from '@/lib/messaging';
+import { useNotificationSheet } from '@/context/NotificationContext';
+import { useUnreadNotifications } from '@/hooks/useNotifications';
 
 const GROUP_EMOJIS = ['🔥', '⚡', '🚀', '🎯', '💪', '🏆', '🌟', '🎮', '🧠', '❤️', '🌿', '🎨'];
 function generateCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
@@ -79,6 +81,26 @@ export default function DashboardPage() {
   const [notifLoading, setNotifLoading] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
+
+  const { openNotif } = useNotificationSheet();
+  const unreadCount = useUnreadNotifications(uid);
+  const autoOpenedRef = useRef(false);
+
+  // Auto-open notification sheet once per session on dashboard if there are unreads
+  useEffect(() => {
+    if (!user || unreadCount === 0) return;
+    if (autoOpenedRef.current) return;
+    const sessionKey = 'notif-sheet-opened-' + user.uid;
+    if (sessionStorage.getItem(sessionKey)) return;
+    // Mark as opened for this session
+    autoOpenedRef.current = true;
+    sessionStorage.setItem(sessionKey, '1');
+    // Small delay so the page renders first
+    const t = setTimeout(() => openNotif(), 800);
+    return () => clearTimeout(t);
+  // Only re-check when unreadCount first becomes non-zero — not on every change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, unreadCount > 0]);
 
   const { groups } = useUserGroups(uid);
   const groupIds = groups.map(g => g.id);
@@ -226,18 +248,19 @@ export default function DashboardPage() {
       await sd(firestoreDoc(db, 'groupMembers', `${gid}_${user.uid}`), {
         groupId: gid, userId: user.uid, role: 'member', joinedAt: serverTimestamp(),
       });
-      // Auto-friend existing members
-      function fid(a: string, b: string) { return [a, b].sort().join('_'); }
+      // Auto-follow all existing members both ways
       const membersSnap = await gds(q(col(db, 'groupMembers'), wh('groupId', '==', gid)));
       await Promise.all(membersSnap.docs.map(async d => {
         const otherUid = d.data().userId as string;
         if (otherUid === user.uid) return;
-        const fsId = fid(user.uid, otherUid);
-        const [a, b] = fsId.split('_');
-        const fsSnap = await gd(fd(db, 'friendships', fsId));
-        if (!fsSnap.exists() || fsSnap.data().status === 'removed') {
-          await sd(fd(db, 'friendships', fsId), { userA: a, userB: b, initiator: 'group', status: 'accepted', createdAt: serverTimestamp() }, { merge: true });
-        }
+        // I follow them
+        await sd(fd(db, 'follows', `${user.uid}_${otherUid}`), {
+          followerId: user.uid, followeeId: otherUid, createdAt: serverTimestamp(),
+        }, { merge: true });
+        // They follow me
+        await sd(fd(db, 'follows', `${otherUid}_${user.uid}`), {
+          followerId: otherUid, followeeId: user.uid, createdAt: serverTimestamp(),
+        }, { merge: true });
       }));
       setShowJoinGroup(false); setJoinCode('');
     } catch (e: unknown) { setGroupFormError(e instanceof Error ? e.message : 'Failed'); }
@@ -446,6 +469,8 @@ export default function DashboardPage() {
                     <FeedItem key={entry.id} entry={entry}
                       members={memberProfiles}
                       quests={allActiveQuests.filter(a => a.groupId === primaryGroupId).map(a => ({ id: a.quest.id, title: a.quest.title }))}
+                      groupId={primaryGroupId ?? undefined}
+                      currentUserId={user?.uid}
                     />
                   ))}
                 </div>

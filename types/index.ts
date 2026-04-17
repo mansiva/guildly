@@ -95,6 +95,28 @@ export interface ActivityEntry {
   value: number;
   createdAt: Date;
   nudge?: string;
+  reactions?: Record<string, string[]>; // emoji -> uid[]
+}
+
+export interface AppNotification {
+  id: string;
+  type: 'reaction' | 'quest_complete' | 'quest_failed' | 'nudge';
+  read: boolean;
+  createdAt: Date;
+  // reaction
+  fromUid?: string;
+  fromName?: string;
+  emoji?: string;
+  feedEntryId?: string;
+  questTitle?: string;
+  groupId?: string;
+  groupName?: string;
+}
+
+export interface Follow {
+  followerId: string;
+  followeeId: string;
+  createdAt: Date;
 }
 
 export interface Nudge {
