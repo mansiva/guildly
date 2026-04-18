@@ -128,15 +128,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const isOwner = userRole === 'owner';
   const isAdmin = userRole === 'owner' || userRole === 'admin';
 
-  function getMemberActiveXp(uid: string): number {
-    return quests
-      .filter(q => q.status === 'active')
-      .reduce((sum, q) => {
-        const contrib = q.contributions?.[uid] || 0;
-        const pct = Math.min(contrib / (q.targetValue || 1), 1);
-        return sum + Math.floor(pct * (q.xpReward || 0) * 0.5);
-      }, 0);
-  }
+
 
   async function handleInvite() {
     setSharing(true);
@@ -363,7 +355,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             ) : (
               <div className="divide-y divide-gray-50">
                 {memberProfiles.map(m => {
-                  const activeXp = getMemberActiveXp(m.uid);
                   const tappable = isAdmin && m.role !== 'owner' && m.uid !== user?.uid;
                   return (
                     <div
@@ -378,9 +369,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                           {getRoleBadge(m.role)}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-indigo-500 font-medium">{activeXp} xp active</span>
-                          <span className="text-xs text-gray-300">·</span>
-                          <span className="text-xs text-gray-400">{m.xpInGroup} xp total</span>
+                          <span className="text-xs text-indigo-500 font-medium">{m.xpInGroup} xp</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
