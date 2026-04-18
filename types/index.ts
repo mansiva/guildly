@@ -69,6 +69,9 @@ export interface Quest {
   renewalCount?: number;        // 0 = never renewed, 1 = once, 2 = twice
   bonusXpMultiplier?: number;   // 1.0 → 0.5 → 0.0 across renewals
   originalDeadline?: Date;      // deadline at quest creation
+  repeat?: boolean;             // if true, cron creates next cycle when this completes
+  repeatSpawned?: boolean;      // true once the repeat has been created
+  repeatedFromQuestId?: string; // source quest id if this is a repeat
 }
 
 export interface QuestTemplate {

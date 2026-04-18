@@ -269,6 +269,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         originalDeadline: data.deadline,
         renewalCount: 0,
         bonusXpMultiplier: 1.0,
+        repeat: data.repeat ?? false,
+        repeatSpawned: false,
         createdAt: serverTimestamp(),
         createdBy: user!.uid,
       });

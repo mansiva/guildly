@@ -14,7 +14,7 @@ export function computeQuestXp(difficulty: QuestDifficulty, deadline: Date): num
   return XP_MATRIX[difficulty][bucket];
 }
 
-export function deadlineForDuration(duration: QuestDuration): Date {
+export function deadlineForDuration(duration: QuestDuration, offset: 'this' | 'next' = 'this'): Date {
   const now = new Date();
   if (duration === 'daily') {
     const d = new Date(now);
@@ -25,13 +25,14 @@ export function deadlineForDuration(duration: QuestDuration): Date {
     // End on Friday 21:00 UTC (= 22:00 CET / 23:00 CEST)
     const d = new Date(now);
     const day = d.getDay(); // 0=Sun, 5=Fri
-    const daysUntilFriday = (5 - day + 7) % 7 || 7; // always at least 1 day ahead
-    d.setDate(d.getDate() + daysUntilFriday);
+    const daysUntilFriday = (5 - day + 7) % 7 || 7; // always next Friday
+    d.setDate(d.getDate() + daysUntilFriday + (offset === 'next' ? 7 : 0));
     d.setUTCHours(21, 0, 0, 0);
     return d;
   }
   if (duration === 'monthly') {
-    const d = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const monthOffset = offset === 'next' ? 2 : 1;
+    const d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 0, 23, 59, 59, 999);
     return d;
   }
   // custom — caller provides deadline

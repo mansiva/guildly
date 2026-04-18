@@ -1,267 +1,262 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminDb, getAdminMessaging } from '@/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
+import { deadlineForDuration } from '@/lib/questXp';
 
 export const dynamic = 'force-dynamic';
 
+// Single daily cron — runs at 21:01 UTC (22:01 CET).
+// 1. Reminder: quests ending within the next ~24h → "Last day to complete!"
+// 2. End-of-week: overdue quests → renew / fail / repeat
+
 export async function GET(req: NextRequest) {
-  // ── Auth: require secret header or query param ─────────────────────────
   const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
   const querySecret = req.nextUrl.searchParams.get('secret');
-
   if (secret && authHeader !== `Bearer ${secret}` && querySecret !== secret) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const db = getAdminDb();
   const messaging = getAdminMessaging();
-
   const now = new Date();
-  // Window: quests ending in the next 13–25 hours (noon run catches midnight deadlines)
-  const windowStart = new Date(now.getTime() + 13 * 60 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);
-  const todayStr = now.toISOString().slice(0, 10); // YYYY-MM-DD dedup key
 
-  const results = { checked: 0, skipped: 0, sent: 0, errors: 0 };
+  // Reminder window: quests whose deadline is in the next 24–25h
+  const windowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+  const windowEnd   = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+  const todayStr    = now.toISOString().slice(0, 10);
 
-  try {
-    // Fetch all active quests across all groups via collectionGroup query.
-    // Filtering deadline client-side to avoid needing a composite index.
-    const questsSnap = await db.collectionGroup('quests')
+  const reminders = { checked: 0, skipped: 0, sent: 0, errors: 0 };
+  const renewals  = { checked: 0, renewed: 0, failed: 0, repeated: 0, errors: 0 };
+
+  // ── Helper: FCM tokens for all active group members ────────────────────
+  async function getMemberTokens(groupId: string): Promise<string[]> {
+    const membersSnap = await db.collection('groupMembers')
+      .where('groupId', '==', groupId)
+      .where('status', '!=', 'removed')
+      .get();
+    const tokens: string[] = [];
+    await Promise.all(membersSnap.docs.map(async m => {
+      const uid = m.data().userId as string;
+      const userSnap = await db.doc(`users/${uid}`).get();
+      const token = userSnap.data()?.fcmToken as string | undefined;
+      if (token) tokens.push(token);
+    }));
+    return tokens;
+  }
+
+  async function push(tokens: string[], title: string, body: string) {
+    if (tokens.length === 0) return;
+    await messaging.sendEachForMulticast({
+      tokens,
+      notification: { title, body },
+      webpush: { notification: { icon: '/icon-192.png' } },
+    }).catch(err => console.error('[QuestCron] FCM error:', err));
+  }
+
+  async function createRepeat(
+    groupId: string,
+    quest: FirebaseFirestore.DocumentData,
+    sourceQuestId: string,
+    tokens: string[],
+    groupName: string,
+  ) {
+    const newDeadline = deadlineForDuration(quest.duration, 'next');
+    const newQuestRef = await db.collection(`groups/${groupId}/quests`).add({
+      groupId,
+      title: quest.title,
+      description: quest.description ?? '',
+      category: quest.category ?? 'custom',
+      targetValue: quest.targetValue,
+      unit: quest.unit,
+      difficulty: quest.difficulty,
+      duration: quest.duration,
+      currentValue: 0,
+      contributions: {},
+      xpDeferred: {},
+      status: 'active',
+      xpReward: quest.xpReward,
+      deadline: newDeadline,
+      originalDeadline: newDeadline,
+      renewalCount: 0,
+      bonusXpMultiplier: 1.0,
+      repeat: true,
+      repeatSpawned: false,
+      repeatedFromQuestId: sourceQuestId,
+      createdAt: FieldValue.serverTimestamp(),
+      createdBy: quest.createdBy ?? 'system',
+    });
+
+    await db.doc(`groups/${groupId}/quests/${sourceQuestId}`).update({ repeatSpawned: true });
+
+    await db.collection(`groups/${groupId}/feed`).add({
+      type: 'quest_repeat', userId: 'system', questId: newQuestRef.id, value: 0,
+      nudge: `🔁 "${quest.title}" is back for another ${quest.duration === 'weekly' ? 'week' : 'month'}!`,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    await push(tokens,
+      `🔁 New Quest — ${groupName}`,
+      `"${quest.title}" is back for another ${quest.duration === 'weekly' ? 'week' : 'month'}! Good luck 💪`
+    );
+  }
+
+  function nextDeadlineAfter(prevDeadline: Date, duration: string | undefined): Date {
+    if (duration === 'weekly') {
+      const d = new Date(prevDeadline.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const day = d.getUTCDay();
+      const daysUntilFriday = (5 - day + 7) % 7;
+      d.setUTCDate(d.getUTCDate() + daysUntilFriday);
+      d.setUTCHours(21, 0, 0, 0);
+      return d;
+    }
+    if (duration === 'monthly') {
+      const d = new Date(prevDeadline);
+      return new Date(d.getFullYear(), d.getMonth() + 2, 0, 23, 59, 59, 999);
+    }
+    return new Date(prevDeadline.getTime() + 86400000);
+  }
+
+  // ── Process all groups ─────────────────────────────────────────────────
+  const groupsSnap = await db.collection('groups').get();
+
+  for (const groupDoc of groupsSnap.docs) {
+    const groupId   = groupDoc.id;
+    const groupName: string = groupDoc.data()?.name ?? 'your group';
+
+    const activeSnap = await db.collection(`groups/${groupId}/quests`)
       .where('status', '==', 'active')
       .get();
 
-    for (const questDoc of questsSnap.docs) {
-      results.checked++;
-      const quest = questDoc.data();
-
-      // Check deadline falls in window
+    for (const questDoc of activeSnap.docs) {
+      const quest    = questDoc.data();
       const deadline: Date = quest.deadline?.toDate?.() ?? new Date(0);
-      if (deadline < windowStart || deadline > windowEnd) {
-        results.skipped++;
-        continue;
-      }
+      const pct      = quest.targetValue > 0 ? (quest.currentValue || 0) / quest.targetValue : 0;
 
-      // Skip if already 100% complete
-      const pct = quest.targetValue > 0 ? quest.currentValue / quest.targetValue : 0;
-      if (pct >= 1) {
-        results.skipped++;
-        continue;
-      }
+      if (deadline > now) {
+        // ── Reminder: deadline within next 24-25h ──────────────────────
+        reminders.checked++;
+        if (deadline < windowStart || deadline > windowEnd) { reminders.skipped++; continue; }
+        if (pct >= 1)                                        { reminders.skipped++; continue; }
+        if (quest.reminderSentDate === todayStr)             { reminders.skipped++; continue; }
 
-      // Dedup: skip if we already sent a reminder today for this quest
-      if (quest.reminderSentDate === todayStr) {
-        results.skipped++;
-        continue;
-      }
+        const tokens = await getMemberTokens(groupId);
+        if (tokens.length === 0) { reminders.skipped++; continue; }
 
-      const groupId = quest.groupId as string;
-      const questTitle = quest.title as string;
-      const current = quest.currentValue as number;
-      const target = quest.targetValue as number;
-      const unit = (quest.unit as string) || '';
-      const pctLabel = Math.round(pct * 100);
+        const remaining  = quest.targetValue - (quest.currentValue || 0);
+        const pctLabel   = Math.round(pct * 100);
+        const body = pct === 0
+          ? `"${quest.title}" ends tomorrow — no one has logged yet. Last chance! 💪`
+          : `"${quest.title}" ends tomorrow — ${pctLabel}% done (${remaining} ${quest.unit || ''} to go). Final push! ⚡`;
 
-      // Get group name
-      let groupName = 'your group';
-      try {
-        const groupSnap = await db.doc(`groups/${groupId}`).get();
-        groupName = groupSnap.data()?.name ?? groupName;
-      } catch { /* non-fatal */ }
+        try {
+          const response = await messaging.sendEachForMulticast({
+            tokens,
+            notification: { title: `⏰ Last day — ${groupName}`, body },
+            webpush: { notification: { icon: '/icon-192.png' } },
+          });
+          reminders.sent += response.successCount;
+          reminders.errors += response.failureCount;
+          await questDoc.ref.update({ reminderSentDate: todayStr });
+        } catch (err) {
+          console.error(`[QuestCron] Reminder FCM failed for ${questDoc.id}:`, err);
+          reminders.errors++;
+        }
 
-      // Get all active group members with FCM tokens
-      const membersSnap = await db.collection('groupMembers')
-        .where('groupId', '==', groupId)
-        .where('status', '!=', 'removed')
-        .get();
+      } else {
+        // ── End-of-week: overdue quest ─────────────────────────────────
+        if (pct >= 1) continue; // already completed — log route handled it
 
-      const tokens: string[] = [];
-      await Promise.all(membersSnap.docs.map(async m => {
-        const uid = m.data().userId as string;
-        const userSnap = await db.doc(`users/${uid}`).get();
-        const token = userSnap.data()?.fcmToken as string | undefined;
-        if (token) tokens.push(token);
-      }));
-
-      if (tokens.length === 0) {
-        results.skipped++;
-        continue;
-      }
-
-      // Build notification
-      const remaining = target - current;
-      const body = pct === 0
-        ? `${questTitle} ends tonight — no one has logged yet. Time to start! 💪`
-        : `${questTitle} ends tonight — ${pctLabel}% done (${remaining} ${unit} to go). Push hard! ⚡`;
-
-      try {
-        const response = await messaging.sendEachForMulticast({
-          tokens,
-          notification: {
-            title: `⏰ Quest ending tonight — ${groupName}`,
-            body,
-          },
-          webpush: {
-            notification: { icon: '/icon-192.png' },
-          },
-        });
-
-        results.sent += response.successCount;
-        results.errors += response.failureCount;
-
-        // Mark dedup on quest doc
-        await questDoc.ref.update({ reminderSentDate: todayStr });
-
-      } catch (err) {
-        console.error(`[QuestReminder] FCM failed for quest ${questDoc.id}:`, err);
-        results.errors++;
-      }
-    }
-
-    console.log('[QuestReminder] Done:', results);
-
-    // ── Overdue quest renewal / failure ───────────────────────────────────
-    const renewalResults = { checked: 0, renewed: 0, failed: 0, errors: 0 };
-    try {
-      const overdueSnap = await db.collectionGroup('quests')
-        .where('status', '==', 'active')
-        .get();
-
-      for (const questDoc of overdueSnap.docs) {
-        const quest = questDoc.data();
-        const deadline: Date = quest.deadline?.toDate?.() ?? new Date(0);
-        if (deadline > now) continue; // not overdue yet
-
-        // Already 100% complete — log route handles completion, skip
-        const pct = quest.targetValue > 0 ? (quest.currentValue || 0) / quest.targetValue : 0;
-        if (pct >= 1) continue;
-
-        renewalResults.checked++;
-        const groupId = quest.groupId as string;
+        renewals.checked++;
         const renewalCount: number = quest.renewalCount ?? 0;
+        const tokens = await getMemberTokens(groupId);
 
         if (renewalCount >= 2) {
-          // 3rd failure — mark as failed
+          // 3rd failure → mark failed
           try {
             await questDoc.ref.update({ status: 'failed', failedAt: now });
-            renewalResults.failed++;
+            renewals.failed++;
 
-            // Notify group members
-            const membersSnap = await db.collection('groupMembers')
-              .where('groupId', '==', groupId)
-              .where('status', '!=', 'removed')
-              .get();
-            const tokens: string[] = [];
-            await Promise.all(membersSnap.docs.map(async m => {
-              const uid = m.data().userId as string;
-              const userSnap = await db.doc(`users/${uid}`).get();
-              const token = userSnap.data()?.fcmToken as string | undefined;
-              if (token) tokens.push(token);
-            }));
-
-            // Feed entry
             await db.collection(`groups/${groupId}/feed`).add({
-              type: 'quest_failed',
-              userId: 'system',
-              questId: questDoc.id,
-              value: 0,
+              type: 'quest_failed', userId: 'system', questId: questDoc.id, value: 0,
               nudge: `❌ Quest failed: "${quest.title}" — not completed after 3 attempts.`,
-              createdAt: now,
+              createdAt: FieldValue.serverTimestamp(),
             });
 
-            if (tokens.length > 0) {
-              await messaging.sendEachForMulticast({
-                tokens,
-                notification: {
-                  title: '❌ Quest Failed',
-                  body: `"${quest.title}" wasn't completed in time after 3 attempts and has been marked as failed.`,
-                },
-                webpush: { notification: { icon: '/icon-192.png' } },
-              }).catch(err => console.error('[QuestRenewal] FCM failed notice error:', err));
+            await push(tokens, '❌ Quest Failed',
+              `"${quest.title}" wasn't completed after 3 attempts and has been marked as failed.`);
+
+            // Repeat even after final failure
+            if (quest.repeat && quest.duration && quest.duration !== 'custom') {
+              await createRepeat(groupId, quest, questDoc.id, tokens, groupName);
+              renewals.repeated++;
             }
           } catch (err) {
-            console.error(`[QuestRenewal] Failed to mark quest ${questDoc.id} as failed:`, err);
-            renewalResults.errors++;
+            console.error(`[QuestCron] Failed to mark ${questDoc.id} as failed:`, err);
+            renewals.errors++;
           }
           continue;
         }
 
-        // Renew the quest
+        // Renew
         try {
-          const newRenewalCount = renewalCount + 1;
-          // bonusXpMultiplier: 1.0 → 0.5 → 0.0
+          const newRenewalCount   = renewalCount + 1;
           const newBonusMultiplier = newRenewalCount >= 2 ? 0.0 : 0.5;
-
-          // Compute new deadline: same duration as original
-          const originalDeadline: Date = quest.originalDeadline?.toDate?.() ?? deadline;
-          const originalDurationMs = originalDeadline.getTime() - (quest.createdAt?.toDate?.()?.getTime?.() ?? (originalDeadline.getTime() - 7 * 86400000));
-          const newDeadline = new Date(deadline.getTime() + Math.max(originalDurationMs, 86400000));
+          const newDeadline        = nextDeadlineAfter(deadline, quest.duration);
 
           await questDoc.ref.update({
             deadline: newDeadline,
             renewalCount: newRenewalCount,
             bonusXpMultiplier: newBonusMultiplier,
           });
-          renewalResults.renewed++;
+          renewals.renewed++;
 
-          // Get group name
-          let groupName = 'your group';
-          try {
-            const groupSnap = await db.doc(`groups/${groupId}`).get();
-            groupName = groupSnap.data()?.name ?? groupName;
-          } catch { /* non-fatal */ }
+          const bonusLabel = newBonusMultiplier === 0
+            ? 'no completion bonus — badges only 🏅'
+            : 'completion bonus halved ⚡';
 
-          // Get all members + tokens
-          const membersSnap = await db.collection('groupMembers')
-            .where('groupId', '==', groupId)
-            .where('status', '!=', 'removed')
-            .get();
-          const tokens: string[] = [];
-          await Promise.all(membersSnap.docs.map(async m => {
-            const uid = m.data().userId as string;
-            const userSnap = await db.doc(`users/${uid}`).get();
-            const token = userSnap.data()?.fcmToken as string | undefined;
-            if (token) tokens.push(token);
-          }));
-
-          const bonusLabel = newBonusMultiplier === 0.0
-            ? 'no completion bonus (badges only)'
-            : '50% completion bonus remaining';
-
-          // Feed entry
           await db.collection(`groups/${groupId}/feed`).add({
-            type: 'quest_renewed',
-            userId: 'system',
-            questId: questDoc.id,
-            value: 0,
-            nudge: `⏰ Quest renewed: "${quest.title}" got another ${Math.round(Math.max(originalDurationMs, 86400000) / 86400000)} days — but ${bonusLabel}.`,
-            createdAt: now,
+            type: 'quest_renewed', userId: 'system', questId: questDoc.id, value: 0,
+            nudge: `⏰ Quest renewed: "${quest.title}" — ${bonusLabel}. One more week!`,
+            createdAt: FieldValue.serverTimestamp(),
           });
 
-          if (tokens.length > 0) {
-            await messaging.sendEachForMulticast({
-              tokens,
-              notification: {
-                title: `⏰ Quest Renewed — ${groupName}`,
-                body: `"${quest.title}" wasn't finished in time. You have another chance — but the completion bonus is reduced. ${newBonusMultiplier === 0 ? 'Complete it for the badges! 🏅' : '⚡ Finish it!'}`,
-              },
-              webpush: { notification: { icon: '/icon-192.png' } },
-            }).catch(err => console.error('[QuestRenewal] FCM renewal notice error:', err));
-          }
+          await push(tokens, `⏰ Quest Renewed — ${groupName}`,
+            `"${quest.title}" wasn't finished in time. ${newBonusMultiplier === 0 ? 'Complete it for the badges!' : 'Completion bonus is halved — finish it!'}`);
         } catch (err) {
-          console.error(`[QuestRenewal] Failed to renew quest ${questDoc.id}:`, err);
-          renewalResults.errors++;
+          console.error(`[QuestCron] Failed to renew ${questDoc.id}:`, err);
+          renewals.errors++;
         }
       }
-    } catch (err) {
-      console.error('[QuestRenewal] Fatal error in renewal block:', err);
     }
 
-    console.log('[QuestRenewal] Done:', renewalResults);
-    return NextResponse.json({ ok: true, reminders: results, renewals: renewalResults });
+    // ── Completed quests with repeat: spawn next cycle ───────────────────
+    const completedSnap = await db.collection(`groups/${groupId}/quests`)
+      .where('status', '==', 'completed')
+      .where('repeat', '==', true)
+      .get();
 
-  } catch (err) {
-    console.error('[QuestReminder] Fatal error:', err);
-    return NextResponse.json({ error: 'Internal error', details: String(err) }, { status: 500 });
+    for (const questDoc of completedSnap.docs) {
+      const quest = questDoc.data();
+      if (!quest.duration || quest.duration === 'custom') continue;
+      if (quest.repeatSpawned) continue;
+
+      // Only spawn if quest completed in last cycle (deadline was in the last 25h)
+      const deadline: Date = quest.deadline?.toDate?.() ?? new Date(0);
+      const msSinceDeadline = now.getTime() - deadline.getTime();
+      if (msSinceDeadline < 0 || msSinceDeadline > 25 * 60 * 60 * 1000) continue;
+
+      try {
+        const tokens = await getMemberTokens(groupId);
+        await createRepeat(groupId, quest, questDoc.id, tokens, groupName);
+        renewals.repeated++;
+      } catch (err) {
+        console.error(`[QuestCron] Failed to create repeat for ${questDoc.id}:`, err);
+        renewals.errors++;
+      }
+    }
   }
+
+  console.log('[QuestCron] Reminders:', reminders, '| Renewals:', renewals);
+  return NextResponse.json({ ok: true, reminders, renewals });
 }
