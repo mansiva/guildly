@@ -10,7 +10,8 @@ import {
   setDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { UserPlus, Search, Share2, Trophy, Users, UserCheck, UserMinus } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { UserPlus, Search, Share2, Trophy, UserCheck } from 'lucide-react';
 
 interface UserProfile {
   uid: string;
@@ -60,6 +61,7 @@ export default function FriendsPage() {
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
+  const router = useRouter();
   const [showSearch, setShowSearch] = useState(false);
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
@@ -277,8 +279,11 @@ export default function FriendsPage() {
               const isFollowingThem = followingSet.has(p.uid);
               const isMutual = followerUidSet.has(p.uid) && followingSet.has(p.uid);
               return (
-                <div key={p.uid}
-                  className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0">
+                <button
+                  key={p.uid}
+                  onClick={() => router.push(`/profile/${p.uid}`)}
+                  className="w-full flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-0 active:bg-gray-50 transition-colors text-left"
+                >
                   <UserAvatar photoURL={p.photoURL} displayName={p.displayName} xp={p.xp} size="sm" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -289,42 +294,10 @@ export default function FriendsPage() {
                     </div>
                     <p className="text-xs text-gray-400">Level {p.level} · {p.xp.toLocaleString()} XP</p>
                   </div>
-
-                  {/* Followers tab: follow-back or mutual indicator */}
-                  {tab === 'followers' && (
-                    isFollowingThem ? (
-                      <button
-                        onClick={() => handleUnfollow(p.uid)}
-                        disabled={toggling === p.uid}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
-                      >
-                        <UserCheck size={12} />
-                        {isMutual ? 'Following' : 'Following'}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handleFollow(p.uid)}
-                        disabled={toggling === p.uid}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
-                      >
-                        <UserPlus size={12} />
-                        {toggling === p.uid ? '…' : 'Follow back'}
-                      </button>
-                    )
+                  {isFollowingThem && (
+                    <UserCheck size={14} className="text-indigo-400 shrink-0" />
                   )}
-
-                  {/* Following tab: unfollow button */}
-                  {tab === 'following' && (
-                    <button
-                      onClick={() => handleUnfollow(p.uid)}
-                      disabled={toggling === p.uid}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-500 text-xs font-semibold rounded-xl active:scale-95 disabled:opacity-50"
-                    >
-                      <UserCheck size={12} />
-                      {toggling === p.uid ? '…' : isMutual ? 'Mutual' : 'Following'}
-                    </button>
-                  )}
-                </div>
+                </button>
               );
             })}
           </div>

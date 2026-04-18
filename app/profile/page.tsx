@@ -5,129 +5,19 @@ import { useAuth } from '@/context/AuthContext';
 import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import AppShell from '@/components/layout/AppShell';
-import ProgressBar from '@/components/ui/ProgressBar';
 import UserAvatar from '@/components/ui/UserAvatar';
+import XPCard from '@/components/profile/XPCard';
+import BadgeGrid from '@/components/profile/BadgeGrid';
 import { xpToLevel } from '@/lib/utils';
 import { LogOut, Star, Pencil, Check, X, Bell, BellOff, Download } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/types';
-import { BADGE_DEFS } from '@/lib/badges';
 import { requestNotificationPermission } from '@/lib/messaging';
 
 const LEVEL_TITLES = [
   'Newcomer', 'Initiate', 'Seeker', 'Trailblazer', 'Challenger',
   'Pathfinder', 'Achiever', 'Champion', 'Hero', 'Legend',
 ];
-
-function formatDate(date: Date | { seconds: number } | string | null | undefined): string {
-  if (!date) return '';
-  let d: Date;
-  if (date instanceof Date) {
-    d = date;
-  } else if (typeof date === 'object' && 'seconds' in date) {
-    d = new Date((date as { seconds: number }).seconds * 1000);
-  } else {
-    d = new Date(date as string);
-  }
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-}
-
-interface BadgeSheetProps {
-  badge: Badge & { tier?: number };
-  userData: { logsCount?: number; questsCompleted?: number; questsLed?: number; nudgesGiven?: number } | null;
-  onClose: () => void;
-}
-
-function BadgeDetailSheet({ badge, userData, onClose }: BadgeSheetProps) {
-  // Determine tier: from stored tier field, or parse from id suffix
-  const parsedTier = parseInt(badge.id.split('_').pop() || '1', 10) || 1;
-  const tier = badge.tier ?? parsedTier;
-
-  // Find current and next tier badge defs
-  const prefix = badge.id.replace(/_\d+$/, '');
-  const thisTierDef = BADGE_DEFS.find(b => b.id === `${prefix}_${tier}`);
-  const nextTierDef = BADGE_DEFS.find(b => b.id === `${prefix}_${tier + 1}`);
-
-  // Progress bar toward next tier (or full at max tier)
-  const statKey = (nextTierDef ?? thisTierDef)?.stat;
-  const currentStat = statKey && userData ? (userData[statKey as keyof typeof userData] as number) || 0 : 0;
-  const targetThreshold = nextTierDef ? nextTierDef.threshold : (thisTierDef?.threshold ?? 1);
-  const progressPct = nextTierDef
-    ? Math.min(Math.round((currentStat / targetThreshold) * 100), 99) // cap at 99% until actually earned
-    : 100; // max tier = full bar
-
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end bg-black/50">
-      {/* Backdrop tap to close */}
-      <div className="absolute inset-0" onClick={onClose} />
-
-      {/* Sheet */}
-      <div className="relative w-full max-w-[480px] bg-white rounded-t-3xl px-5 pt-5 overflow-y-auto pb-16">
-        {/* Close button */}
-        <div className="flex justify-end mb-2">
-          <button onClick={onClose} className="p-2 rounded-full bg-gray-100">
-            <X size={18} className="text-gray-500" />
-          </button>
-        </div>
-
-        {/* Emoji */}
-        <div className="flex flex-col items-center mb-4">
-          <span className="text-5xl mb-3">{badge.emoji}</span>
-          <h2 className="font-bold text-xl text-gray-900 text-center">{badge.name}</h2>
-
-          {/* Tier indicator */}
-          <div className="flex items-center gap-1 mt-2">
-            {[1, 2, 3].map((t) => (
-              <span
-                key={t}
-                className={`text-sm ${t <= tier ? 'text-yellow-400' : 'text-gray-300'}`}
-              >
-                ★
-              </span>
-            ))}
-            <span className="text-xs text-gray-500 ml-1">Tier {tier} / 3</span>
-          </div>
-        </div>
-
-        {/* Description */}
-        <div className="bg-gray-50 rounded-2xl p-4 mb-4">
-          <p className="text-sm text-gray-700 text-center">{badge.description}</p>
-        </div>
-
-        {/* Earned date */}
-        {badge.earnedAt && (
-          <p className="text-xs text-gray-400 text-center mb-4">
-            Earned: {formatDate(badge.earnedAt as unknown as Date | { seconds: number })}
-          </p>
-        )}
-
-        {/* Progress bar + next tier info */}
-        <div className="bg-indigo-50 rounded-2xl p-4">
-          {nextTierDef ? (
-            <>
-              <p className="text-xs font-semibold text-indigo-600 mb-1">Next tier: {nextTierDef.name}</p>
-              <p className="text-xs text-indigo-700 mb-3">{nextTierDef.description}</p>
-              <div className="w-full bg-indigo-200 rounded-full h-2 mb-1">
-                <div
-                  className="bg-indigo-600 h-2 rounded-full transition-all"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <p className="text-xs text-indigo-500 text-right">{currentStat} / {targetThreshold}</p>
-            </>
-          ) : (
-            <>
-              <p className="text-sm text-indigo-700 font-medium text-center mb-3">Max tier reached 🏆</p>
-              <div className="w-full bg-indigo-200 rounded-full h-2">
-                <div className="bg-indigo-600 h-2 rounded-full w-full" />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function ProfilePage() {
   const { user, logout } = useAuth();
@@ -140,7 +30,6 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [savingName, setSavingName] = useState(false);
-  const [selectedBadge, setSelectedBadge] = useState<(Badge & { tier?: number }) | null>(null);
   const [togglingNotif, setTogglingNotif] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<Event | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -221,7 +110,7 @@ export default function ProfilePage() {
   }
 
   const xp = userData?.xp || 0;
-  const { level, progress, nextLevelXp } = xpToLevel(xp);
+  const { level } = xpToLevel(xp);
   const title = LEVEL_TITLES[Math.min(level - 1, LEVEL_TITLES.length - 1)];
   const badges = (userData?.badges || []) as (Badge & { tier?: number })[];
   const displayName = userData?.displayName || user?.displayName || '';
@@ -268,25 +157,7 @@ export default function ProfilePage() {
         </div>
 
         {/* XP / Level card */}
-        <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl p-5 text-white mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <p className="text-indigo-200 text-sm">Total XP</p>
-              <p className="text-3xl font-bold">{xp.toLocaleString()}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-indigo-200 text-sm">Level</p>
-              <p className="text-4xl font-bold">{level}</p>
-            </div>
-          </div>
-          <ProgressBar
-            value={progress}
-            max={nextLevelXp}
-            color="bg-white/90"
-            trackColor="bg-white/20"
-          />
-          <p className="text-indigo-200 text-xs mt-1 text-right">{progress} / {nextLevelXp} to Level {level + 1}</p>
-        </div>
+        <XPCard xp={xp} />
 
         {/* Badges */}
         <div className="mb-6">
@@ -294,34 +165,7 @@ export default function ProfilePage() {
             <Star size={18} className="text-yellow-500" />
             <h2 className="font-bold text-gray-900">Badges ({badges.length})</h2>
           </div>
-          {badges.length === 0 ? (
-            <div className="bg-white rounded-3xl p-6 text-center border border-dashed border-gray-200">
-              <p className="text-gray-400 text-sm">Complete quests to earn badges!</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-4 gap-3">
-              {badges.map((badge) => {
-                const badgeTier = badge.tier ?? (parseInt(badge.id.split('_').pop() || '1', 10) || 1);
-                return (
-                  <button
-                    key={badge.id}
-                    onClick={() => setSelectedBadge(badge)}
-                    className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
-                  >
-                    <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-2xl">
-                      {badge.emoji}
-                    </div>
-                    <span className="text-xs text-center text-gray-600 leading-tight">{badge.name}</span>
-                    <div className="flex gap-0.5">
-                      {[1, 2, 3].map(t => (
-                        <span key={t} className={`text-[10px] ${t <= badgeTier ? 'text-yellow-400' : 'text-gray-200'}`}>★</span>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <BadgeGrid badges={badges} userData={userData} />
         </div>
 
         {/* Install app */}
@@ -398,10 +242,6 @@ export default function ProfilePage() {
         </button>
       </div>
 
-      {/* Badge detail bottom sheet */}
-      {selectedBadge && (
-        <BadgeDetailSheet badge={selectedBadge} userData={userData} onClose={() => setSelectedBadge(null)} />
-      )}
     </AppShell>
   );
 }
