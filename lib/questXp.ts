@@ -22,10 +22,12 @@ export function deadlineForDuration(duration: QuestDuration): Date {
     return d;
   }
   if (duration === 'weekly') {
+    // End on Friday 21:00 UTC (= 22:00 CET / 23:00 CEST)
     const d = new Date(now);
-    const daysUntilSunday = (7 - d.getDay()) % 7 || 7;
-    d.setDate(d.getDate() + daysUntilSunday);
-    d.setHours(23, 59, 59, 999);
+    const day = d.getDay(); // 0=Sun, 5=Fri
+    const daysUntilFriday = (5 - day + 7) % 7 || 7; // always at least 1 day ahead
+    d.setDate(d.getDate() + daysUntilFriday);
+    d.setUTCHours(21, 0, 0, 0);
     return d;
   }
   if (duration === 'monthly') {
