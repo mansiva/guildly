@@ -11,7 +11,7 @@ import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
 import { xpToLevel } from '@/lib/utils';
-import { Users, Crown, ArrowLeft, UserPlus, UserCheck, Share2, Trash2, Shield, ChevronRight, X, LogOut, Zap } from 'lucide-react';
+import { Users, Crown, ArrowLeft, UserPlus, UserCheck, Share2, Trash2, Shield, ChevronRight, X, LogOut, Zap, Pencil } from 'lucide-react';
 import Link from 'next/link';
 import {
   collection, addDoc, updateDoc, serverTimestamp, Timestamp, deleteDoc, doc,
@@ -355,16 +355,13 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
             ) : (
               <div className="divide-y divide-gray-50">
                 {memberProfiles.map(m => {
-                  const tappable = isAdmin && m.role !== 'owner' && m.uid !== user?.uid;
+                  const manageable = isAdmin && m.role !== 'owner' && m.uid !== user?.uid;
                   const isOtherUser = m.uid !== user?.uid;
                   return (
                     <div
                       key={m.uid}
-                      className={`flex items-center gap-3 py-2.5 ${(tappable || isOtherUser) ? 'cursor-pointer active:bg-gray-50 rounded-xl -mx-1 px-1' : ''}`}
-                      onClick={() => {
-                        if (tappable) { setManagingMember(m); return; }
-                        if (isOtherUser) router.push(`/profile/${m.uid}`);
-                      }}
+                      className={`flex items-center gap-3 py-2.5 ${isOtherUser ? 'cursor-pointer active:bg-gray-50 rounded-xl -mx-1 px-1' : ''}`}
+                      onClick={() => { if (isOtherUser) router.push(`/profile/${m.uid}`); }}
                     >
                       <UserAvatar photoURL={m.photoURL} displayName={m.displayName} xp={m.xp} size="sm" />
                       <div className="flex-1 min-w-0">
@@ -408,7 +405,16 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                             <UserPlus size={13} />
                           </button>
                         )}
-                        {(tappable || isOtherUser) && <ChevronRight size={14} className="text-gray-300" />}
+                        {manageable && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setManagingMember(m); }}
+                            className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 active:scale-95 transition-transform"
+                            title="Manage member"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        )}
+                        {isOtherUser && <ChevronRight size={14} className="text-gray-300" />}
                       </div>
                     </div>
                   );
@@ -416,7 +422,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
               </div>
             )}
           </div>
-          {isAdmin && <p className="text-xs text-gray-400 text-center mt-1.5">Tap a member to manage their role</p>}
+          {isAdmin && <p className="text-xs text-gray-400 text-center mt-1.5">Tap to view profile · ✏️ to manage role</p>}
         </div>
 
         {/* Active quests */}
