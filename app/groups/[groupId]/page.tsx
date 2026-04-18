@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import React, { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import AppShell from '@/components/layout/AppShell';
@@ -10,6 +10,7 @@ import ProgressBar from '@/components/ui/ProgressBar';
 import UserAvatar from '@/components/ui/UserAvatar';
 import QuestFormSheet, { questFormToFirestore } from '@/components/quests/QuestFormSheet';
 import CompactQuestRow from '@/components/quests/CompactQuestRow';
+import QuestCompleteOverlay from '@/components/quests/QuestCompleteOverlay';
 import { xpToLevel } from '@/lib/utils';
 import { Users, Crown, ArrowLeft, UserPlus, UserCheck, Share2, Trash2, Shield, ChevronRight, X, LogOut, Zap, Pencil } from 'lucide-react';
 import Link from 'next/link';
@@ -54,14 +55,62 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
   const [followToggling, setFollowToggling] = useState<string | null>(null);
+  const [pendingOverlays, setPendingOverlays] = useState<React.ComponentProps<typeof QuestCompleteOverlay>[]>([]);
+  const seenCompletionsKey = `seenCompletions_${groupId}_${uid}`;
   // nudgeStatus: tracks per-recipient whether sender has recently nudged them
   const [nudgeStatuses, setNudgeStatuses] = useState<Record<string, 'ok' | 'limited' | 'sending'>>({});
-
 
   const [memberProfiles, setMemberProfiles] = useState<{
     uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string; fcmToken?: string;
   }[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+
+  // Auto-show completion overlay for quests completed since last visit
+  useEffect(() => {
+    if (!uid || !memberProfiles.length || !quests.length) return;
+    const seen: string[] = JSON.parse(localStorage.getItem(seenCompletionsKey) || '[]');
+    const unseen = quests.filter(q =>
+      q.status === 'completed' &&
+      q.contributions?.[uid] != null &&
+      !seen.includes(q.id)
+    );
+    if (!unseen.length) return;
+
+    const overlays = unseen.map(q => {
+      const questXp = q.xpReward || 100;
+      const totalContributed = Object.values(q.contributions).reduce((s, v) => s + v, 0);
+      const contributions = Object.entries(q.contributions).map(([cUid, contributed]) => {
+        const member = memberProfiles.find(m => m.uid === cUid);
+        const pct = Math.round((contributed / (q.targetValue || totalContributed)) * 100);
+        const xpEarned = Math.floor(Math.min(contributed / (q.targetValue || 1), 1) * questXp * 0.5) +
+          (cUid === q.topContributor ? Math.floor(questXp * 0.1) : 0);
+        return {
+          uid: cUid,
+          displayName: member?.displayName || 'Unknown',
+          photoURL: member?.photoURL,
+          xp: member?.xp || 0,
+          contributed,
+          pct,
+          xpEarned,
+          isTop: cUid === q.topContributor,
+          isMe: cUid === uid,
+        };
+      }).sort((a, b) => b.pct - a.pct);
+
+      return {
+        questTitle: q.title,
+        unit: q.unit,
+        targetValue: q.targetValue,
+        totalXp: questXp,
+        contributions,
+        onDismiss: () => {},
+      };
+    });
+
+    // Mark all as seen immediately so refresh doesn\'t re-queue
+    localStorage.setItem(seenCompletionsKey, JSON.stringify([...seen, ...unseen.map(q => q.id)]));
+    setPendingOverlays(overlays);
+  }, [uid, quests, memberProfiles]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || !groupId) return;
@@ -488,6 +537,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           editing={editingQuest}
           onClose={() => setShowQuestForm(false)}
           onSave={handleSaveQuest}
+        />
+      )}
+
+      {/* Quest completion overlay — auto-shown once per quest per user */}
+      {pendingOverlays.length > 0 && (
+        <QuestCompleteOverlay
+          {...pendingOverlays[0]}
+          onDismiss={() => setPendingOverlays(prev => prev.slice(1))}
         />
       )}
 
