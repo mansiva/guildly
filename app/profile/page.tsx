@@ -34,17 +34,27 @@ function formatDate(date: Date | { seconds: number } | string | null | undefined
 
 interface BadgeSheetProps {
   badge: Badge & { tier?: number };
+  userData: { logsCount?: number; questsCompleted?: number; questsLed?: number; nudgesGiven?: number } | null;
   onClose: () => void;
 }
 
-function BadgeDetailSheet({ badge, onClose }: BadgeSheetProps) {
+function BadgeDetailSheet({ badge, userData, onClose }: BadgeSheetProps) {
   // Determine tier: from stored tier field, or parse from id suffix
   const parsedTier = parseInt(badge.id.split('_').pop() || '1', 10) || 1;
   const tier = badge.tier ?? parsedTier;
 
-  // Find the next tier badge def
+  // Find current and next tier badge defs
   const prefix = badge.id.replace(/_\d+$/, '');
+  const thisTierDef = BADGE_DEFS.find(b => b.id === `${prefix}_${tier}`);
   const nextTierDef = BADGE_DEFS.find(b => b.id === `${prefix}_${tier + 1}`);
+
+  // Progress bar toward next tier (or full at max tier)
+  const statKey = (nextTierDef ?? thisTierDef)?.stat;
+  const currentStat = statKey && userData ? (userData[statKey as keyof typeof userData] as number) || 0 : 0;
+  const targetThreshold = nextTierDef ? nextTierDef.threshold : (thisTierDef?.threshold ?? 1);
+  const progressPct = nextTierDef
+    ? Math.min(Math.round((currentStat / targetThreshold) * 100), 99) // cap at 99% until actually earned
+    : 100; // max tier = full bar
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-end bg-black/50">
@@ -91,18 +101,27 @@ function BadgeDetailSheet({ badge, onClose }: BadgeSheetProps) {
           </p>
         )}
 
-        {/* Next tier info */}
+        {/* Progress bar + next tier info */}
         <div className="bg-indigo-50 rounded-2xl p-4">
           {nextTierDef ? (
             <>
-              <p className="text-xs font-semibold text-indigo-600 mb-1">Next tier</p>
-              <p className="text-sm text-indigo-900 font-medium">{nextTierDef.name}</p>
-              <p className="text-xs text-indigo-700 mt-0.5">
-                {nextTierDef.description} — {nextTierDef.threshold} {nextTierDef.stat}
-              </p>
+              <p className="text-xs font-semibold text-indigo-600 mb-1">Next tier: {nextTierDef.name}</p>
+              <p className="text-xs text-indigo-700 mb-3">{nextTierDef.description}</p>
+              <div className="w-full bg-indigo-200 rounded-full h-2 mb-1">
+                <div
+                  className="bg-indigo-600 h-2 rounded-full transition-all"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="text-xs text-indigo-500 text-right">{currentStat} / {targetThreshold}</p>
             </>
           ) : (
-            <p className="text-sm text-indigo-700 font-medium text-center">Max tier reached 🏆</p>
+            <>
+              <p className="text-sm text-indigo-700 font-medium text-center mb-3">Max tier reached 🏆</p>
+              <div className="w-full bg-indigo-200 rounded-full h-2">
+                <div className="bg-indigo-600 h-2 rounded-full w-full" />
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -115,6 +134,7 @@ export default function ProfilePage() {
   const router = useRouter();
   const [userData, setUserData] = useState<{
     displayName: string; xp: number; level: number; badges: Badge[]; fcmToken?: string;
+    logsCount?: number; questsCompleted?: number; questsLed?: number; nudgesGiven?: number;
   } | null>(null);
 
   const [editingName, setEditingName] = useState(false);
@@ -280,18 +300,26 @@ export default function ProfilePage() {
             </div>
           ) : (
             <div className="grid grid-cols-4 gap-3">
-              {badges.map((badge) => (
-                <button
-                  key={badge.id}
-                  onClick={() => setSelectedBadge(badge)}
-                  className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
-                >
-                  <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-2xl">
-                    {badge.emoji}
-                  </div>
-                  <span className="text-xs text-center text-gray-600 leading-tight">{badge.name}</span>
-                </button>
-              ))}
+              {badges.map((badge) => {
+                const badgeTier = badge.tier ?? (parseInt(badge.id.split('_').pop() || '1', 10) || 1);
+                return (
+                  <button
+                    key={badge.id}
+                    onClick={() => setSelectedBadge(badge)}
+                    className="flex flex-col items-center gap-1 active:scale-95 transition-transform"
+                  >
+                    <div className="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-2xl">
+                      {badge.emoji}
+                    </div>
+                    <span className="text-xs text-center text-gray-600 leading-tight">{badge.name}</span>
+                    <div className="flex gap-0.5">
+                      {[1, 2, 3].map(t => (
+                        <span key={t} className={`text-[10px] ${t <= badgeTier ? 'text-yellow-400' : 'text-gray-200'}`}>★</span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -372,7 +400,7 @@ export default function ProfilePage() {
 
       {/* Badge detail bottom sheet */}
       {selectedBadge && (
-        <BadgeDetailSheet badge={selectedBadge} onClose={() => setSelectedBadge(null)} />
+        <BadgeDetailSheet badge={selectedBadge} userData={userData} onClose={() => setSelectedBadge(null)} />
       )}
     </AppShell>
   );
