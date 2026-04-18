@@ -266,6 +266,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
         currentValue: 0, contributions: {}, xpDeferred: {},
         status: 'active', xpReward: data.xpReward,
         deadline: data.deadline,
+        originalDeadline: data.deadline,
+        renewalCount: 0,
+        bonusXpMultiplier: 1.0,
         createdAt: serverTimestamp(),
         createdBy: user!.uid,
       });

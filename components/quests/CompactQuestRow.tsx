@@ -108,6 +108,11 @@ export default function CompactQuestRow({ quest, userId, groupId, onEdit, groupL
               <span className="text-sm font-semibold text-gray-900 truncate">{quest.title}</span>
               {completed && <span className="text-xs text-green-600 font-medium shrink-0">✓ Done</span>}
               {tl?.label === 'Overdue' && <span className="text-xs text-red-500 font-medium shrink-0">⚠ Overdue</span>}
+              {!completed && (quest.renewalCount ?? 0) > 0 && (
+                <span className="text-xs font-medium shrink-0 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600">
+                  {quest.bonusXpMultiplier === 0 ? '🏅 Badges only' : `⚠ Renewal ${quest.renewalCount}`}
+                </span>
+              )}
               {groupLabel && <span className="text-xs text-gray-400 shrink-0">{groupLabel}</span>}
             </div>
             <div className="flex items-center gap-3">

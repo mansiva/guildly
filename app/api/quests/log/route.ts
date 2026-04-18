@@ -132,8 +132,9 @@ export async function POST(req: NextRequest) {
       const completionUpdates: Promise<unknown>[] = [];
       for (const [uid, contributed] of Object.entries(contributions)) {
         const contribPct = Math.min(contributed / (finalQuest.targetValue || totalContributed), 1);
-        const deferred = Math.floor(contribPct * questXp * 0.5);
-        const bonus = uid === topUid ? Math.floor(questXp * 0.10) : 0;
+        const bonusMultiplier = typeof finalQuest.bonusXpMultiplier === 'number' ? finalQuest.bonusXpMultiplier : 1.0;
+        const deferred = Math.floor(contribPct * questXp * 0.5 * bonusMultiplier);
+        const bonus = uid === topUid ? Math.floor(questXp * 0.10 * bonusMultiplier) : 0;
         const totalPayout = deferred + bonus;
         if (totalPayout <= 0) continue;
 

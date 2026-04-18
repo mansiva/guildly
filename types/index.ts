@@ -66,6 +66,9 @@ export interface Quest {
   topContributor?: string;               // userId of top contributor on completion
   status: 'active' | 'completed' | 'failed';
   xpReward: number;
+  renewalCount?: number;        // 0 = never renewed, 1 = once, 2 = twice
+  bonusXpMultiplier?: number;   // 1.0 → 0.5 → 0.0 across renewals
+  originalDeadline?: Date;      // deadline at quest creation
 }
 
 export interface QuestTemplate {
