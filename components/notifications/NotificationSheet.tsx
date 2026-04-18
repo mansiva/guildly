@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, doc, getDoc, getDocs, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { markAllRead } from '@/lib/notifications';
-import { AppNotification } from '@/types';
+import { AppNotification, Quest } from '@/types';
 import { X, Bell } from 'lucide-react';
 import { formatRelativeTime } from '@/lib/utils';
+import { useNotificationSheet } from '@/context/NotificationContext';
 
 interface Props {
   uid: string;
@@ -39,6 +40,54 @@ function notifText(n: AppNotification): string {
 export default function NotificationSheet({ uid, open, onClose }: Props) {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const { pushOverlay, closeNotif } = useNotificationSheet();
+
+  const handleQuestCompleteTap = useCallback(async (n: AppNotification) => {
+    if (!n.questId || !n.groupId) return;
+    try {
+      // Fetch quest
+      const qSnap = await getDoc(doc(db, 'groups', n.groupId, 'quests', n.questId));
+      if (!qSnap.exists()) return;
+      const quest = { id: qSnap.id, ...qSnap.data() } as Quest;
+
+      // Fetch group members
+      const memberSnap = await getDocs(query(collection(db, 'groupMembers'), where('groupId', '==', n.groupId)));
+      const memberUids = memberSnap.docs.map(d => d.data().userId as string);
+      const members = await Promise.all(
+        memberUids.map(async (mUid) => {
+          const uSnap = await getDoc(doc(db, 'users', mUid));
+          const d = uSnap.exists() ? uSnap.data() : {};
+          return { uid: mUid, displayName: d.displayName || 'Unknown', photoURL: d.photoURL, xp: d.xp || 0 };
+        })
+      );
+
+      const questXp = quest.xpReward || 100;
+      const totalContributed = Object.values(quest.contributions).reduce((s, v) => s + v, 0);
+      const contributions = Object.entries(quest.contributions).map(([cUid, contributed]) => {
+        const member = members.find(m => m.uid === cUid);
+        const pct = Math.round((contributed / (quest.targetValue || totalContributed || 1)) * 100);
+        const xpEarned =
+          Math.floor(Math.min(contributed / (quest.targetValue || 1), 1) * questXp * 0.5) +
+          (cUid === quest.topContributor ? Math.floor(questXp * 0.1) : 0);
+        return {
+          uid: cUid,
+          displayName: member?.displayName || 'Unknown',
+          photoURL: member?.photoURL,
+          xp: member?.xp || 0,
+          contributed: contributed as number,
+          pct,
+          xpEarned,
+          isTop: cUid === quest.topContributor,
+          isMe: cUid === uid,
+        };
+      }).sort((a, b) => b.pct - a.pct);
+
+      closeNotif();
+      pushOverlay({ questTitle: quest.title, unit: quest.unit, targetValue: quest.targetValue, totalXp: questXp, contributions });
+    } catch (e) {
+      console.error('[NotificationSheet] Failed to load quest overlay:', e);
+    }
+  }, [uid, pushOverlay, closeNotif]);
 
   useEffect(() => {
     if (!uid) return;
@@ -119,7 +168,8 @@ export default function NotificationSheet({ uid, open, onClose }: Props) {
                 return (
                   <div
                     key={n.id}
-                    className={`flex items-start gap-3 px-5 py-3.5 ${!n.read ? 'bg-indigo-50/50' : ''}`}
+                    onClick={n.type === 'quest_complete' ? () => handleQuestCompleteTap(n) : undefined}
+                    className={`flex items-start gap-3 px-5 py-3.5 ${!n.read ? 'bg-indigo-50/50' : ''} ${n.type === 'quest_complete' ? 'cursor-pointer active:bg-indigo-100/60' : ''}`}
                   >
                     <div className="w-9 h-9 rounded-2xl bg-indigo-100 flex items-center justify-center text-lg flex-shrink-0">
                       {n.type === 'reaction' ? n.emoji : icon}

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     await questRef.update({
       currentValue: newValue,
       [`contributions.${userId}`]: FieldValue.increment(value),
-      ...(completed ? { status: 'completed' } : {}),
+      ...(completed ? { status: 'completed', completedAt: FieldValue.serverTimestamp() } : {}),
     });
 
     // ── Award immediate XP + increment logsCount ──────────────────────────
@@ -228,6 +228,7 @@ export async function POST(req: NextRequest) {
             adminDb.collection(`notifications/${uid}/items`).add({
               type: 'quest_complete',
               questTitle: quest.title,
+              questId,
               groupId,
               groupName,
               read: false,

@@ -72,6 +72,7 @@ export interface Quest {
   repeat?: boolean;             // if true, cron creates next cycle when this completes
   repeatSpawned?: boolean;      // true once the repeat has been created
   repeatedFromQuestId?: string; // source quest id if this is a repeat
+  completedAt?: Date;           // set when status transitions to 'completed'
 }
 
 export interface QuestTemplate {
@@ -115,6 +116,7 @@ export interface AppNotification {
   emoji?: string;
   feedEntryId?: string;
   questTitle?: string;
+  questId?: string;
   groupId?: string;
   groupName?: string;
 }
