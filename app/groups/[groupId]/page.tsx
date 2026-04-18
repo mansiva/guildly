@@ -53,6 +53,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
   const [managingMember, setManagingMember] = useState<typeof memberProfiles[0] | null>(null);
   const [followingSet, setFollowingSet] = useState<Set<string>>(new Set());
+  const [followersSet, setFollowersSet] = useState<Set<string>>(new Set());
   const [followToggling, setFollowToggling] = useState<string | null>(null);
   // nudgeStatus: tracks per-recipient whether sender has recently nudged them
   const [nudgeStatuses, setNudgeStatuses] = useState<Record<string, 'ok' | 'limited' | 'sending'>>({});
@@ -84,8 +85,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       setMemberProfiles(loaded);
       setLoadingMembers(false);
       // Load follow statuses
-      const followSnap = await getDocs(query(collection(db, 'follows'), where('followerId', '==', myUid)));
+      const [followSnap, followerSnap] = await Promise.all([
+        getDocs(query(collection(db, 'follows'), where('followerId', '==', myUid))),
+        getDocs(query(collection(db, 'follows'), where('followeeId', '==', myUid))),
+      ]);
       setFollowingSet(new Set(followSnap.docs.map(d => d.data().followeeId as string)));
+      setFollowersSet(new Set(followerSnap.docs.map(d => d.data().followerId as string)));
 
       // Check nudge rate limits client-side (6h window)
       const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
@@ -394,20 +399,32 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                             </button>
                           );
                         })()}
-                        {m.uid !== user?.uid && (
-                          <button
-                            onClick={e => { e.stopPropagation(); handleFollowToggle(m.uid); }}
-                            disabled={followToggling === m.uid}
-                            title={followingSet.has(m.uid) ? 'Unfollow' : 'Follow'}
-                            className={`p-1.5 rounded-lg transition-transform active:scale-95 disabled:opacity-50 ${
-                              followingSet.has(m.uid)
-                                ? 'bg-indigo-50 text-indigo-500'
-                                : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-500'
-                            }`}
-                          >
-                            {followingSet.has(m.uid) ? <UserCheck size={13} /> : <UserPlus size={13} />}
-                          </button>
-                        )}
+                        {m.uid !== user?.uid && (() => {
+                          const isMutual = followingSet.has(m.uid) && followersSet.has(m.uid);
+                          const isFollowing = followingSet.has(m.uid);
+                          if (isMutual) {
+                            // Friends — show static badge, no action
+                            return (
+                              <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-400" title="Friends">
+                                <UserCheck size={13} />
+                              </span>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={e => { e.stopPropagation(); handleFollowToggle(m.uid); }}
+                              disabled={followToggling === m.uid}
+                              title={isFollowing ? 'Unfollow' : 'Follow'}
+                              className={`p-1.5 rounded-lg transition-transform active:scale-95 disabled:opacity-50 ${
+                                isFollowing
+                                  ? 'bg-indigo-50 text-indigo-500'
+                                  : 'bg-gray-50 text-gray-400 hover:bg-indigo-50 hover:text-indigo-500'
+                              }`}
+                            >
+                              {isFollowing ? <UserCheck size={13} /> : <UserPlus size={13} />}
+                            </button>
+                          );
+                        })()}
                         {tappable && <ChevronRight size={14} className="text-gray-300" />}
                       </div>
                     </div>
