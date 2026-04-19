@@ -22,6 +22,7 @@ export interface Group {
   emoji: string;
   maxMembers: number;
   xp: number;
+  sharedSparks?: number;
   badges: Badge[];
   createdAt: Date;
 }
@@ -33,6 +34,7 @@ export interface GroupMember {
   role: 'owner' | 'admin' | 'member';
   joinedAt: any;
   xpInGroup?: number;
+  sparksInGroup?: number;
   status?: 'active' | 'removed';
 }
 

@@ -81,12 +81,14 @@ export async function POST(req: NextRequest) {
       ...(newBadgeObjs.length > 0 ? { badges: FieldValue.arrayUnion(...newBadgeObjs) } : {}),
     });
 
-    // Increment xpInGroup (quest XP only, not badges) and group XP
+    // Increment xpInGroup + sparksInGroup (quest XP only, not badges) and group XP + sharedSparks
     await adminDb.doc(`groupMembers/${groupId}_${userId}`).update({
       xpInGroup: FieldValue.increment(immediateXp),
+      sparksInGroup: FieldValue.increment(immediateXp),
     });
     await adminDb.doc(`groups/${groupId}`).update({
       xp: FieldValue.increment(immediateXp),
+      sharedSparks: FieldValue.increment(immediateXp),
     });
 
     // ── Add feed entry ─────────────────────────────────────────────────────
@@ -170,6 +172,7 @@ export async function POST(req: NextRequest) {
         }));
         completionUpdates.push(adminDb.doc(`groupMembers/${groupId}_${uid}`).update({
           xpInGroup: FieldValue.increment(deferred), // only quest XP, not badges
+          sparksInGroup: FieldValue.increment(deferred), // wallet mirrors xpInGroup
         }));
 
         // Badge feed entries for completion badges
@@ -194,6 +197,7 @@ export async function POST(req: NextRequest) {
       }, 0);
       await adminDb.doc(`groups/${groupId}`).update({
         xp: FieldValue.increment(totalDeferredGroup),
+        sharedSparks: FieldValue.increment(totalDeferredGroup),
       });
 
       // Top contributor feed callout

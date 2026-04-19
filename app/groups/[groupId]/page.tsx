@@ -58,7 +58,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
   const [nudgeStatuses, setNudgeStatuses] = useState<Record<string, 'ok' | 'limited' | 'sending'>>({});
 
   const [memberProfiles, setMemberProfiles] = useState<{
-    uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; role: string; fcmToken?: string;
+    uid: string; displayName: string; photoURL?: string; xp: number; xpInGroup: number; sparksInGroup: number; role: string; fcmToken?: string;
   }[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
 
@@ -78,7 +78,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
       const loaded = await Promise.all(activeDocs.map(async m => {
         const snap = await getDoc(doc(db, 'users', m.userId));
         const data = snap.exists() ? snap.data() : null;
-        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0, fcmToken: data?.fcmToken };
+        return { uid: m.userId, role: m.role, displayName: data?.displayName || 'Unknown', photoURL: data?.photoURL, xp: data?.xp || 0, xpInGroup: m.xpInGroup || 0, sparksInGroup: m.sparksInGroup || 0, fcmToken: data?.fcmToken };
       }));
       setMemberProfiles(loaded);
       setLoadingMembers(false);
@@ -311,14 +311,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
           </div>
           <div className="text-right">
             <div className="text-sm font-bold text-indigo-600">Level {level}</div>
-            <div className="text-xs text-gray-400">{group.xp || 0} XP</div>
+            <div className="text-xs text-gray-400">⚡ {(group.sharedSparks || group.xp || 0).toLocaleString()} shared sparks</div>
           </div>
         </div>
 
         {/* XP bar */}
         <div className="mb-4">
           <ProgressBar value={progress} max={nextLevelXp} color="bg-gradient-to-r from-indigo-500 to-purple-500" />
-          <p className="text-xs text-gray-400 mt-1 text-right">Group XP to Level {level + 1}</p>
+          <p className="text-xs text-gray-400 mt-1 text-right">Group sparks to Level {level + 1}</p>
         </div>
 
         {/* Admin actions */}
@@ -367,14 +367,14 @@ export default function GroupDetailPage({ params }: { params: Promise<{ groupId:
                       className={`flex items-center gap-3 py-2.5 ${isOtherUser ? 'cursor-pointer active:bg-gray-50 rounded-xl -mx-1 px-1' : ''}`}
                       onClick={() => { if (isOtherUser) router.push(`/profile/${m.uid}`); }}
                     >
-                      <UserAvatar photoURL={m.photoURL} displayName={m.displayName} xp={m.xp} size="sm" />
+                      <UserAvatar photoURL={m.photoURL} displayName={m.displayName} xp={m.xpInGroup} size="sm" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-medium text-gray-800 truncate">{m.displayName}</span>
                           {getRoleBadge(m.role)}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-indigo-500 font-medium">{m.xpInGroup} xp</span>
+                          <span className="text-xs text-indigo-500 font-medium">⚡ {m.sparksInGroup.toLocaleString()} sparks</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
