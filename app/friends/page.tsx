@@ -220,7 +220,7 @@ export default function FriendsPage() {
                       <UserAvatar photoURL={r.photoURL} displayName={r.displayName} xp={r.xp} size="sm" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">{r.displayName}</p>
-                        <p className="text-xs text-gray-400">Level {r.level} · {r.xp} XP</p>
+                        <p className="text-xs text-gray-400">{r.xp} XP</p>
                       </div>
                       {isFollowing ? (
                         <button onClick={() => handleUnfollow(r.uid)} disabled={toggling === r.uid}
@@ -292,7 +292,7 @@ export default function FriendsPage() {
                         <span className="text-xs text-indigo-500 font-medium bg-indigo-50 px-1.5 py-0.5 rounded-full">mutual</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-400">Level {p.level} · {p.xp.toLocaleString()} XP</p>
+                    <p className="text-xs text-gray-400">{p.xp.toLocaleString()} XP</p>
                   </div>
                   {isFollowingThem && (
                     <UserCheck size={14} className="text-indigo-400 shrink-0" />
