@@ -17,22 +17,26 @@ export function computeQuestXp(difficulty: QuestDifficulty, deadline: Date): num
 export function deadlineForDuration(duration: QuestDuration, offset: 'this' | 'next' = 'this'): Date {
   const now = new Date();
   if (duration === 'daily') {
+    // End at 20:00 UTC = 22:00 CEST (10pm CEST)
     const d = new Date(now);
-    d.setHours(23, 59, 59, 999);
+    d.setUTCHours(20, 0, 0, 0);
+    // If 20:00 UTC already passed today, move to tomorrow
+    if (d <= now) d.setUTCDate(d.getUTCDate() + 1);
     return d;
   }
   if (duration === 'weekly') {
-    // End on Friday 21:00 UTC (= 22:00 CET / 23:00 CEST)
+    // End on Friday 20:00 UTC = 22:00 CEST (10pm CEST)
     const d = new Date(now);
-    const day = d.getDay(); // 0=Sun, 5=Fri
+    const day = d.getUTCDay(); // 0=Sun, 5=Fri
     const daysUntilFriday = (5 - day + 7) % 7 || 7; // always next Friday
-    d.setDate(d.getDate() + daysUntilFriday + (offset === 'next' ? 7 : 0));
-    d.setUTCHours(21, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() + daysUntilFriday + (offset === 'next' ? 7 : 0));
+    d.setUTCHours(20, 0, 0, 0);
     return d;
   }
   if (duration === 'monthly') {
+    // Last day of month at 20:00 UTC = 22:00 CEST
     const monthOffset = offset === 'next' ? 2 : 1;
-    const d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 0, 23, 59, 59, 999);
+    const d = new Date(Date.UTC(now.getFullYear(), now.getMonth() + monthOffset, 0, 20, 0, 0, 0));
     return d;
   }
   // custom — caller provides deadline

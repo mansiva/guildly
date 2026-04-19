@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
     tokens: string[],
     groupName: string,
   ) {
-    const newDeadline = deadlineForDuration(quest.duration, 'next');
+    const newDeadline = deadlineForDuration(quest.duration, 'this');
     const newQuestRef = await db.collection(`groups/${groupId}/quests`).add({
       groupId,
       title: quest.title,
@@ -103,18 +103,23 @@ export async function GET(req: NextRequest) {
 
   function nextDeadlineAfter(prevDeadline: Date, duration: string | undefined): Date {
     if (duration === 'weekly') {
+      // Snap to next Friday 20:00 UTC after prevDeadline
       const d = new Date(prevDeadline.getTime() + 7 * 24 * 60 * 60 * 1000);
       const day = d.getUTCDay();
       const daysUntilFriday = (5 - day + 7) % 7;
       d.setUTCDate(d.getUTCDate() + daysUntilFriday);
-      d.setUTCHours(21, 0, 0, 0);
+      d.setUTCHours(20, 0, 0, 0);
       return d;
     }
     if (duration === 'monthly') {
+      // Last day of next month at 20:00 UTC
       const d = new Date(prevDeadline);
-      return new Date(d.getFullYear(), d.getMonth() + 2, 0, 23, 59, 59, 999);
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 0, 20, 0, 0, 0));
     }
-    return new Date(prevDeadline.getTime() + 86400000);
+    // daily: next day at 20:00 UTC
+    const d = new Date(prevDeadline.getTime() + 86400000);
+    d.setUTCHours(20, 0, 0, 0);
+    return d;
   }
 
   // ── Process all groups ─────────────────────────────────────────────────
